@@ -886,9 +886,11 @@ export class Agent<
   }
 
   async aiAct(
-    taskPrompt: string,
+    taskPrompt: TUserPrompt,
     opt?: AiActOptions,
   ): Promise<string | undefined> {
+    const taskPromptText =
+      typeof taskPrompt === 'string' ? taskPrompt : taskPrompt.prompt;
     const fileChooserAccept = opt?.fileChooserAccept
       ? this.normalizeFileInput(opt.fileChooserAccept)
       : undefined;
@@ -971,7 +973,7 @@ export class Agent<
         const yamlContent: MidsceneYamlScript = {
           tasks: [
             {
-              name: taskPrompt,
+              name: taskPromptText,
               flow: actionOutput.yamlFlow,
             },
           ],
@@ -996,7 +998,7 @@ export class Agent<
   /**
    * @deprecated Use {@link Agent.aiAct} instead.
    */
-  async aiAction(taskPrompt: string, opt?: AiActOptions) {
+  async aiAction(taskPrompt: TUserPrompt, opt?: AiActOptions) {
     return this.aiAct(taskPrompt, opt);
   }
 
