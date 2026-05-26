@@ -1,8 +1,19 @@
 import { PlaygroundConversationPanel } from '@midscene/playground-app';
-import type { UniversalPlaygroundConfig } from '@midscene/visualizer';
+import type {
+  ExternalRunRequest,
+  FormValue,
+  UniversalPlaygroundConfig,
+} from '@midscene/visualizer';
+import { Tooltip, message } from 'antd';
+import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { downloadStudioReport } from '../../playground/report-download';
 import { useStudioPlayground } from '../../playground/useStudioPlayground';
+import {
+  createRecorderMarkdownReplayRequest,
+  getRecorderYamlReplayContent,
+} from '../../recorder/replay';
+import { createStudioRecorderTargetSignature } from '../../recorder/selectors';
 import type { StudioRecorderPanelMode } from '../../recorder/types';
 import { useStudioRecorder } from '../../recorder/useStudioRecorder';
 import { PlaygroundShell } from '../PlaygroundShell';
@@ -27,6 +38,7 @@ function NotConnectedFallback() {
 
 declare const __APP_VERSION__: string;
 const RIGHT_PANEL_MODE_STORAGE_KEY = 'studio.rightPanelMode';
+type ReplayableCodeType = 'markdown' | 'yaml';
 
 function PlaygroundModeIcon() {
   return (
@@ -58,6 +70,31 @@ function RecorderModeIcon() {
   );
 }
 
+function ImportReplayIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-[16px] w-[16px]"
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth="1.6"
+    >
+      <path d="M12 4v10" stroke="currentColor" strokeLinecap="round" />
+      <path
+        d="m8 8 4-4 4 4"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"
+        stroke="currentColor"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function readPersistedRightPanelMode(): StudioRecorderPanelMode {
   if (typeof window === 'undefined') {
     return 'playground';
@@ -69,12 +106,31 @@ function readPersistedRightPanelMode(): StudioRecorderPanelMode {
     : 'playground';
 }
 
-export function createStudioPlaygroundConfig(): Partial<UniversalPlaygroundConfig> {
+function createExternalRunRequest(
+  value: FormValue,
+  displayContent: string,
+): ExternalRunRequest {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    value,
+    displayContent,
+  };
+}
+
+export function createStudioPlaygroundConfig(
+  options: {
+    externalRunRequest?: ExternalRunRequest | null;
+    importReplayAction?: ReactNode;
+  } = {},
+): Partial<UniversalPlaygroundConfig> {
   return {
     emptyState: <StudioPlaygroundEmptyState />,
+    externalRunRequest: options.externalRunRequest ?? null,
     onDownloadReport: downloadStudioReport,
+    showClearButton: true,
     promptInputChrome: {
       variant: 'default',
+      inputActions: options.importReplayAction,
     },
   };
 }
@@ -83,10 +139,86 @@ export default function Playground() {
   const studioPlayground = useStudioPlayground();
   const recorder = useStudioRecorder();
   const stopRecording = recorder.stopRecording;
+  const [externalRunRequest, setExternalRunRequest] =
+    useState<ExternalRunRequest | null>(null);
   const [rightPanelMode, setRightPanelMode] = useState<StudioRecorderPanelMode>(
     readPersistedRightPanelMode,
   );
-  const playgroundConfig = useMemo(() => createStudioPlaygroundConfig(), []);
+  const showPlaygroundPanel = useCallback(() => {
+    setRightPanelMode('playground');
+    window.localStorage.setItem(RIGHT_PANEL_MODE_STORAGE_KEY, 'playground');
+  }, []);
+  const triggerExternalRun = useCallback(
+    (value: FormValue, displayContent: string) => {
+      showPlaygroundPanel();
+      setExternalRunRequest(createExternalRunRequest(value, displayContent));
+    },
+    [showPlaygroundPanel],
+  );
+  const importReplayDisabledReason =
+    studioPlayground.phase !== 'ready' ||
+    !studioPlayground.controller.state.serverOnline ||
+    !studioPlayground.controller.state.sessionViewState.connected
+      ? 'Connect a target before replaying a file.'
+      : null;
+  const handleImportReplay = useCallback(async () => {
+    try {
+      if (importReplayDisabledReason) {
+        message.info(importReplayDisabledReason);
+        return;
+      }
+      if (!window.studioRuntime?.chooseReplayFile) {
+        message.error('Studio replay file picker is unavailable.');
+        return;
+      }
+      const replayFile = await window.studioRuntime.chooseReplayFile();
+      if (!replayFile) {
+        return;
+      }
+      if (replayFile.type === 'markdown') {
+        triggerExternalRun(
+          { type: 'runMarkdown', prompt: replayFile.path },
+          `Imported Markdown Replay: ${replayFile.displayName}`,
+        );
+        return;
+      }
+      triggerExternalRun(
+        { type: 'runYaml', prompt: replayFile.content },
+        `Imported YAML Replay: ${replayFile.displayName}`,
+      );
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : String(error));
+    }
+  }, [importReplayDisabledReason, triggerExternalRun]);
+  const importReplayAction = useMemo(
+    () => (
+      <Tooltip
+        placement="top"
+        title={importReplayDisabledReason || 'Import Markdown or YAML replay'}
+      >
+        <span className="inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center leading-none">
+          <button
+            aria-label="Import Markdown or YAML replay"
+            className="inline-flex h-[32px] w-[32px] min-w-[32px] items-center justify-center rounded-full border border-border-subtle bg-surface p-[7px] leading-none text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-45"
+            disabled={Boolean(importReplayDisabledReason)}
+            onClick={handleImportReplay}
+            type="button"
+          >
+            <ImportReplayIcon />
+          </button>
+        </span>
+      </Tooltip>
+    ),
+    [handleImportReplay, importReplayDisabledReason],
+  );
+  const playgroundConfig = useMemo(
+    () =>
+      createStudioPlaygroundConfig({
+        externalRunRequest,
+        importReplayAction,
+      }),
+    [externalRunRequest, importReplayAction],
+  );
   const modeMenuItems = useMemo(
     () => [
       { key: 'playground', label: 'Playground', icon: <PlaygroundModeIcon /> },
@@ -102,10 +234,70 @@ export default function Playground() {
       if (rightPanelMode === 'recorder' && key !== 'recorder') {
         void stopRecording();
       }
-      setRightPanelMode(key);
-      window.localStorage.setItem(RIGHT_PANEL_MODE_STORAGE_KEY, key);
+      if (key === 'playground') {
+        showPlaygroundPanel();
+        return;
+      }
+      setRightPanelMode('recorder');
+      window.localStorage.setItem(RIGHT_PANEL_MODE_STORAGE_KEY, 'recorder');
     },
-    [rightPanelMode, stopRecording],
+    [rightPanelMode, showPlaygroundPanel, stopRecording],
+  );
+  const handleReplaySession = useCallback(
+    async (sessionId: string, type: ReplayableCodeType) => {
+      const session = recorder.state.sessions.find(
+        (item) => item.id === sessionId,
+      );
+      if (!session) {
+        throw new Error('Recorder session not found.');
+      }
+      if (recorder.state.isRecording) {
+        throw new Error('Stop recording before replay.');
+      }
+      if (
+        studioPlayground.phase !== 'ready' ||
+        !studioPlayground.controller.state.serverOnline ||
+        !studioPlayground.controller.state.sessionViewState.connected
+      ) {
+        throw new Error('Connect a target before replay.');
+      }
+      const currentTargetSignature = createStudioRecorderTargetSignature(
+        recorder.currentTarget,
+      );
+      if (
+        !currentTargetSignature ||
+        createStudioRecorderTargetSignature(session.target) !==
+          currentTargetSignature
+      ) {
+        throw new Error('Connect the recorded target before replay.');
+      }
+
+      if (type === 'markdown') {
+        if (!window.studioRuntime?.prepareRecorderMarkdownReplay) {
+          throw new Error('Studio Markdown replay bridge is unavailable.');
+        }
+        const replay = await window.studioRuntime.prepareRecorderMarkdownReplay(
+          createRecorderMarkdownReplayRequest(session),
+        );
+        triggerExternalRun(
+          { type: 'runMarkdown', prompt: replay.markdownPath },
+          `Markdown Replay: ${session.name}`,
+        );
+        return;
+      }
+
+      triggerExternalRun(
+        { type: 'runYaml', prompt: getRecorderYamlReplayContent(session) },
+        `YAML Replay: ${session.name}`,
+      );
+    },
+    [
+      recorder.currentTarget,
+      recorder.state.isRecording,
+      recorder.state.sessions,
+      studioPlayground,
+      triggerExternalRun,
+    ],
   );
 
   useEffect(() => {
@@ -124,7 +316,7 @@ export default function Playground() {
     >
       <div className="min-h-0 h-full flex-1 overflow-hidden">
         {rightPanelMode === 'recorder' ? (
-          <StudioRecorderPanel />
+          <StudioRecorderPanel onReplaySession={handleReplaySession} />
         ) : studioPlayground.phase === 'booting' ? (
           <div className="flex h-full items-center justify-center px-6 text-center text-[14px] leading-[22px] text-text-tertiary">
             Playground starting...

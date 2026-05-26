@@ -304,6 +304,12 @@ export interface FormValue {
   params?: Record<string, unknown>;
 }
 
+export interface ExternalRunRequest {
+  id: string;
+  value: FormValue;
+  displayContent?: string;
+}
+
 // ExecutionOptions is imported from playground package to ensure consistency
 export type { ExecutionOptions };
 
@@ -405,6 +411,7 @@ export interface UniversalPlaygroundConfig {
   deviceType?: DeviceType;
   executionUx?: ExecutionUxConfig;
   promptInputChrome?: PromptInputChromeConfig;
+  externalRunRequest?: ExternalRunRequest | null;
   /**
    * Whether to render the "clear conversation" button that appears above the
    * message list once there is more than one item. Defaults to `true`.
@@ -482,6 +489,7 @@ export interface PromptInputChromeConfig {
     history?: string;
     settings?: string;
   };
+  inputActions?: ReactNode;
 }
 
 // branding interface

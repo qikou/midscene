@@ -5,7 +5,7 @@ import Icon, {
   UpOutlined,
 } from '@ant-design/icons';
 import { Alert, Button, Form, List, Typography } from 'antd';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePlaygroundExecution } from '../../hooks/usePlaygroundExecution';
 import { usePlaygroundState } from '../../hooks/usePlaygroundState';
 import { useEnvConfig } from '../../store/store';
@@ -23,6 +23,7 @@ import { shouldOffsetEmptyStateForPromptInput } from '../../utils/prompt-input-u
 import { PromptInput } from '../prompt-input';
 import ShinyText from '../shiny-text';
 import { shouldRenderCustomEmptyState } from './empty-state';
+import { shouldExecuteExternalRunRequest } from './external-run';
 import {
   createStorageProvider,
   detectBestStorageType,
@@ -70,6 +71,7 @@ export function UniversalPlayground({
   const [form] = Form.useForm();
   const { config } = useEnvConfig();
   const [sdkReady, setSdkReady] = useState(false);
+  const lastExternalRunRequestIdRef = useRef<string | null>(null);
 
   // Initialize form with default type on mount
   useEffect(() => {
@@ -138,6 +140,7 @@ export function UniversalPlayground({
     verticalMode,
     replayCounter,
     setReplayCounter,
+    messagesInitialized,
     infoListRef,
     currentRunningIdRef,
     interruptedFlagRef,
@@ -191,6 +194,32 @@ export function UniversalPlayground({
       notifyError(error, { title: 'Execution failed' });
     }
   }, [form, executeAction]);
+
+  useEffect(() => {
+    const request = componentConfig.externalRunRequest;
+    if (
+      !request ||
+      !shouldExecuteExternalRunRequest({
+        request,
+        lastRequestId: lastExternalRunRequestIdRef.current,
+        sdkReady,
+        messagesInitialized,
+      })
+    ) {
+      return;
+    }
+    lastExternalRunRequestIdRef.current = request.id;
+    executeAction(request.value, {
+      displayContent: request.displayContent,
+    }).catch((error) => {
+      notifyError(error, { title: 'Execution failed' });
+    });
+  }, [
+    componentConfig.externalRunRequest,
+    executeAction,
+    messagesInitialized,
+    sdkReady,
+  ]);
 
   // Check if run button should be enabled
   const configAlreadySet = Object.keys(config || {}).length >= 1;

@@ -14,6 +14,7 @@ const { createStudioPlaygroundConfig } = await import(
 describe('Studio playground config', () => {
   it('uses the full prompt chrome like the Chrome extension playground', () => {
     expect(createStudioPlaygroundConfig()).toMatchObject({
+      showClearButton: true,
       promptInputChrome: {
         variant: 'default',
       },

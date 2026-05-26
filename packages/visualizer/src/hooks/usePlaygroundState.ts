@@ -46,10 +46,28 @@ export function usePlaygroundState(
   const infoListRef = useRef<HTMLDivElement>(null);
   const currentRunningIdRef = useRef<number | null>(null);
   const interruptedFlagRef = useRef<Record<number, boolean>>({});
-  const initializedRef = useRef<boolean>(false);
+  const initializedStorageRef = useRef<StorageProvider | null>();
+  const [, bumpMessagesInitialization] = useState(0);
 
   // Initialize messages from storage (runs when storage becomes available)
   useEffect(() => {
+    let cancelled = false;
+    const storageIdentity = storage ?? null;
+
+    const markMessagesInitialized = () => {
+      if (cancelled) {
+        return;
+      }
+      initializedStorageRef.current = storageIdentity;
+      bumpMessagesInitialization((version) => version + 1);
+    };
+
+    const applyMessages = (messages: InfoListItem[]) => {
+      if (!cancelled) {
+        setInfoList(messages);
+      }
+    };
+
     const migrateFromOldNamespace = async (): Promise<InfoListItem[]> => {
       // Try to load from old default namespace
       const oldStorage = createStorageProvider(
@@ -106,27 +124,30 @@ export function usePlaygroundState(
             (msg) => msg.id === 'welcome',
           );
           if (hasWelcomeMessage) {
-            setInfoList(storedMessages);
+            applyMessages(storedMessages);
           } else {
-            setInfoList([welcomeMessage, ...storedMessages]);
+            applyMessages([welcomeMessage, ...storedMessages]);
           }
         } catch (error) {
           console.error('Failed to load messages:', error);
-          setInfoList([welcomeMessage]);
+          applyMessages([welcomeMessage]);
         }
       } else {
-        setInfoList([welcomeMessage]);
+        applyMessages([welcomeMessage]);
       }
+      markMessagesInitialized();
     };
 
     // Initialize when storage becomes available, avoid duplicate initialization
-    if (storage && !initializedRef.current) {
-      initializedRef.current = true;
-      initializeMessages();
-    } else if (!storage && infoList.length === 0) {
-      // Fallback: initialize without storage if none provided
-      initializeMessages();
+    if (initializedStorageRef.current !== storageIdentity) {
+      if (storage || infoList.length === 0) {
+        void initializeMessages();
+      }
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [storage]); // Add storage to dependency array
 
   // Save messages to storage when they change
@@ -291,6 +312,7 @@ export function usePlaygroundState(
     setLoading,
     infoList,
     setInfoList,
+    messagesInitialized: initializedStorageRef.current === (storage ?? null),
     actionSpace,
     actionSpaceLoading,
     uiContextPreview,

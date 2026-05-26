@@ -158,7 +158,7 @@
 
 .studio-recorder-card-actions {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   border-top: 1px solid var(--midscene-border-subtle);
   background: var(--midscene-surface-muted);
 }
@@ -172,6 +172,17 @@
   background: transparent;
   color: var(--midscene-text-secondary);
   cursor: pointer;
+}
+
+.studio-recorder-card-action-tooltip {
+  display: block;
+  min-width: 0;
+  height: 40px;
+}
+
+.studio-recorder-card-action-tooltip button {
+  width: 100%;
+  height: 100%;
 }
 
 .studio-recorder-card-actions button:hover:not(:disabled) {

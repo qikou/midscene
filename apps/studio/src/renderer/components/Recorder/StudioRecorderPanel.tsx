@@ -1,7 +1,9 @@
 import { RecordTimeline } from '@midscene/recorder';
 import type { StudioRecorderCodeType } from '@shared/electron-contract';
-import { message } from 'antd';
+import { Tooltip, message } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useStudioPlayground } from '../../playground/useStudioPlayground';
+import { createStudioRecorderTargetSignature } from '../../recorder/selectors';
 import type {
   StudioRecorderGenerationProgress,
   StudioRecorderGenerationStepId,
@@ -112,12 +114,33 @@ function TrashIcon() {
   );
 }
 
+function ReplayIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24" strokeWidth="1.8">
+      <path
+        d="M5 5.5 18.5 12 5 18.5V5.5Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function CheckIcon() {
   return (
     <svg aria-hidden="true" fill="none" viewBox="0 0 24 24" strokeWidth="1.8">
       <path d="m5 12 4 4L19 6" stroke="currentColor" />
     </svg>
   );
+}
+
+type ReplayableCodeType = Extract<StudioRecorderCodeType, 'markdown' | 'yaml'>;
+
+interface StudioRecorderPanelProps {
+  onReplaySession?: (
+    sessionId: string,
+    type: ReplayableCodeType,
+  ) => Promise<void>;
 }
 
 function formatDate(timestamp: number) {
@@ -291,8 +314,11 @@ function getGenerationSteps(
   ] as const;
 }
 
-export function StudioRecorderPanel() {
+export function StudioRecorderPanel({
+  onReplaySession,
+}: StudioRecorderPanelProps = {}) {
   const recorder = useStudioRecorder();
+  const studioPlayground = useStudioPlayground();
   const {
     state,
     currentSession,
@@ -307,6 +333,14 @@ export function StudioRecorderPanel() {
     exportAllZip,
   } = recorder;
   const sessions = state.sessions;
+  const currentTargetSignature = useMemo(
+    () => createStudioRecorderTargetSignature(currentTarget),
+    [currentTarget],
+  );
+  const replayConnectionReady =
+    studioPlayground.phase === 'ready' &&
+    studioPlayground.controller.state.serverOnline &&
+    studioPlayground.controller.state.sessionViewState.connected;
   const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<StudioRecorderTab>('timeline');
   const [selectedCodeType, setSelectedCodeType] =
@@ -358,6 +392,80 @@ export function StudioRecorderPanel() {
       ? `Ready for ${platformLabel(currentTarget.platformId)}`
       : 'Ready';
   }, [canStartRecording, currentTarget, state.initializing, state.isRecording]);
+
+  const getReplayCommonDisabledReason = useCallback(
+    (session: StudioRecordingSession): string | null => {
+      if (!onReplaySession) {
+        return 'Replay is unavailable.';
+      }
+      if (state.isRecording) {
+        return 'Stop recording before replay.';
+      }
+      if (!replayConnectionReady || !currentTargetSignature) {
+        return 'Connect a target before replay.';
+      }
+      if (
+        createStudioRecorderTargetSignature(session.target) !==
+        currentTargetSignature
+      ) {
+        return 'Connect the recorded target before replay.';
+      }
+      return null;
+    },
+    [
+      currentTargetSignature,
+      onReplaySession,
+      replayConnectionReady,
+      state.isRecording,
+    ],
+  );
+
+  const resolveReplayAction = useCallback(
+    (
+      session: StudioRecordingSession,
+    ): {
+      type: ReplayableCodeType | null;
+      title: string;
+      disabledReason: string | null;
+    } => {
+      const commonReason = getReplayCommonDisabledReason(session);
+      if (commonReason) {
+        return {
+          type: null,
+          title: 'Replay recording',
+          disabledReason: commonReason,
+        };
+      }
+      if (session.generatedCode?.markdown) {
+        return {
+          type: 'markdown',
+          title: 'Replay Markdown',
+          disabledReason: null,
+        };
+      }
+      if (session.generatedCode?.yaml) {
+        return {
+          type: 'yaml',
+          title: 'Replay YAML',
+          disabledReason: null,
+        };
+      }
+      if (session.generatedCode?.playwright) {
+        return {
+          type: null,
+          title: 'Replay recording',
+          disabledReason:
+            'Playwright replay is not supported inside Studio yet.',
+        };
+      }
+      return {
+        type: null,
+        title: 'Replay recording',
+        disabledReason: 'Generate Markdown or YAML before replay.',
+      };
+    },
+    [getReplayCommonDisabledReason],
+  );
 
   useEffect(() => {
     if (state.isRecording && currentSession?.id) {
@@ -565,6 +673,42 @@ export function StudioRecorderPanel() {
               </div>
             </div>
             <div className="studio-recorder-card-actions">
+              {(() => {
+                const replayAction = resolveReplayAction(session);
+                return (
+                  <Tooltip
+                    placement="top"
+                    title={replayAction.disabledReason || replayAction.title}
+                  >
+                    <span
+                      className="studio-recorder-card-action-tooltip"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                      }}
+                    >
+                      <button
+                        aria-label={replayAction.title}
+                        disabled={Boolean(replayAction.disabledReason)}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          const replayType = replayAction.type;
+                          if (!replayType || !onReplaySession) {
+                            return;
+                          }
+                          void runPanelAction(() =>
+                            onReplaySession(session.id, replayType),
+                          );
+                        }}
+                        title={replayAction.title}
+                        type="button"
+                      >
+                        <ReplayIcon />
+                      </button>
+                    </span>
+                  </Tooltip>
+                );
+              })()}
               <button
                 onClick={(event) => {
                   event.stopPropagation();

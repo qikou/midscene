@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { toStudioRecorderCodegenInput } from '../src/renderer/recorder/codegen-adapter';
 import { mapPageRecorderEventToStudioRecordedEvent } from '../src/renderer/recorder/event-mapper';
 import { generateStudioRecorderYaml } from '../src/renderer/recorder/export';
+import {
+  createRecorderMarkdownReplayRequest,
+  getRecorderYamlReplayContent,
+} from '../src/renderer/recorder/replay';
 import { resolveStudioRecorderTarget } from '../src/renderer/recorder/selectors';
 import type { StudioRecordingSession } from '../src/renderer/recorder/types';
 
@@ -255,5 +259,78 @@ describe('studio recorder codegen adapter', () => {
       includeTimestamps: true,
       maxScreenshots: 5,
     });
+  });
+});
+
+describe('studio recorder replay adapters', () => {
+  it('creates a Markdown replay request from AI generated Markdown and screenshots', () => {
+    const session: StudioRecordingSession = {
+      id: 'session-1',
+      name: 'Replay login',
+      status: 'completed',
+      createdAt: 1,
+      updatedAt: 2,
+      target: {
+        platformId: 'web',
+        label: 'Web',
+        deviceId: 'https://example.com',
+        values: { url: 'https://example.com' },
+      },
+      events: [
+        {
+          type: 'click',
+          platformId: 'web',
+          actionType: 'Click',
+          rawPayload: {},
+          target: {
+            platformId: 'web',
+            label: 'Web',
+            deviceId: 'https://example.com',
+            values: { url: 'https://example.com' },
+          },
+          pageInfo: { width: 1280, height: 720 },
+          timestamp: 1,
+          hashId: 'click-1',
+          screenshotWithBox:
+            'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ',
+        },
+      ],
+      generatedCode: {
+        markdown: '# Replay login\n\n## Steps\n1. Tap login\n',
+      },
+    };
+
+    expect(createRecorderMarkdownReplayRequest(session)).toMatchObject({
+      markdown: '# Replay login\n\n## Steps\n1. Tap login\n',
+      screenshots: [
+        {
+          relativePath: './screenshots/event-001-click.png',
+          base64Data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ',
+        },
+      ],
+    });
+  });
+
+  it('requires AI generated replay artifacts', () => {
+    const session: StudioRecordingSession = {
+      id: 'session-1',
+      name: 'Replay login',
+      status: 'completed',
+      createdAt: 1,
+      updatedAt: 2,
+      target: {
+        platformId: 'web',
+        label: 'Web',
+        values: { url: 'https://example.com' },
+      },
+      events: [],
+    };
+
+    expect(() => createRecorderMarkdownReplayRequest(session)).toThrow(
+      'Generate Markdown before replay.',
+    );
+    expect(() => getRecorderYamlReplayContent(session)).toThrow(
+      'Generate YAML before replay.',
+    );
   });
 });

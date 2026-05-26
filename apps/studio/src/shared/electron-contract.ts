@@ -34,6 +34,8 @@ export const IPC_CHANNELS = {
   generateRecorderYaml: 'studio:generate-recorder-yaml',
   generateRecorderCode: 'studio:generate-recorder-code',
   generateRecorderMetadata: 'studio:generate-recorder-metadata',
+  prepareRecorderMarkdownReplay: 'studio:prepare-recorder-markdown-replay',
+  chooseReplayFile: 'studio:choose-replay-file',
   // Auto-updater bridge — main owns the electron-updater state machine,
   // the renderer just renders it.
   updaterCheck: 'updater:check',
@@ -112,6 +114,33 @@ export interface GenerateRecorderMetadataResult {
   title?: string;
   description?: string;
 }
+
+export interface RecorderMarkdownReplayScreenshot {
+  relativePath: string;
+  base64Data: string;
+}
+
+export interface PrepareRecorderMarkdownReplayRequest {
+  markdown: string;
+  screenshots: RecorderMarkdownReplayScreenshot[];
+}
+
+export interface PrepareRecorderMarkdownReplayResult {
+  markdownPath: string;
+}
+
+export type ChooseReplayFileResult =
+  | {
+      type: 'markdown';
+      path: string;
+      displayName: string;
+    }
+  | {
+      type: 'yaml';
+      content: string;
+      displayName: string;
+    }
+  | null;
 
 /** Generic bootstrap status for the multi-platform playground server. */
 export interface PlaygroundBootstrap {
@@ -251,4 +280,8 @@ export interface StudioRuntimeApi {
   generateRecorderMetadata: (
     request: GenerateRecorderMetadataRequest,
   ) => Promise<GenerateRecorderMetadataResult>;
+  prepareRecorderMarkdownReplay: (
+    request: PrepareRecorderMarkdownReplayRequest,
+  ) => Promise<PrepareRecorderMarkdownReplayResult>;
+  chooseReplayFile: () => Promise<ChooseReplayFileResult>;
 }

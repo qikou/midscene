@@ -1,6 +1,7 @@
 import type { PlaygroundPageRecordedEvent } from '@midscene/playground';
 import { getDebug } from '@midscene/shared/logger';
 import type { StudioRecorderCodeType } from '@shared/electron-contract';
+import { message } from 'antd';
 import type { PropsWithChildren } from 'react';
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { useStudioPlayground } from '../playground/useStudioPlayground';
@@ -11,7 +12,7 @@ import {
   generateStudioRecorderJson,
   generateStudioRecorderPlaywright,
   generateStudioRecorderYaml,
-  getStudioRecorderExportFileName,
+  getStudioRecorderExportVariantFileName,
   saveStudioRecorderFile,
 } from './export';
 import {
@@ -672,7 +673,11 @@ export function StudioRecorderProvider({ children }: PropsWithChildren) {
     }
     await saveStudioRecorderFile({
       title: 'Export Recorder JSON',
-      defaultFileName: getStudioRecorderExportFileName(session, 'json'),
+      defaultFileName: getStudioRecorderExportVariantFileName(
+        session,
+        'json',
+        'json',
+      ),
       filters: [{ name: 'JSON', extensions: ['json'] }],
       content: generateStudioRecorderJson(session),
     });
@@ -685,13 +690,23 @@ export function StudioRecorderProvider({ children }: PropsWithChildren) {
     if (!session) {
       return;
     }
+    const usesFallback = !session.generatedCode?.yaml;
     await saveStudioRecorderFile({
       title: 'Export Recorder YAML',
-      defaultFileName: getStudioRecorderExportFileName(session, 'yaml'),
+      defaultFileName: getStudioRecorderExportVariantFileName(
+        session,
+        'yaml',
+        'yaml',
+      ),
       filters: [{ name: 'YAML', extensions: ['yaml', 'yml'] }],
       content:
         session.generatedCode?.yaml || generateStudioRecorderYaml(session),
     });
+    if (usesFallback) {
+      message.info(
+        'Downloaded fallback YAML generated from recorded events, not AI YAML.',
+      );
+    }
   }, []);
 
   const exportSessionCode = useCallback(
@@ -709,16 +724,23 @@ export function StudioRecorderProvider({ children }: PropsWithChildren) {
       }
 
       if (type === 'markdown') {
+        const usesFallback = !session.generatedCode?.markdown;
         await saveStudioRecorderFile({
           title: 'Export Recorder Markdown Replay',
-          defaultFileName: getStudioRecorderExportFileName(
+          defaultFileName: getStudioRecorderExportVariantFileName(
             session,
-            'markdown.zip',
+            'markdown',
+            'zip',
           ),
           filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
           content: await createStudioRecorderMarkdownZipBase64(session),
           encoding: 'base64',
         });
+        if (usesFallback) {
+          message.info(
+            'Downloaded fallback Markdown generated from recorded events, not AI Markdown.',
+          );
+        }
         return;
       }
 
@@ -732,7 +754,11 @@ export function StudioRecorderProvider({ children }: PropsWithChildren) {
       }
       await saveStudioRecorderFile({
         title: 'Export Recorder Playwright Test',
-        defaultFileName: getStudioRecorderExportFileName(session, 'spec.ts'),
+        defaultFileName: getStudioRecorderExportVariantFileName(
+          session,
+          'playwright',
+          'spec.ts',
+        ),
         filters: [{ name: 'Playwright Test', extensions: ['ts'] }],
         content: playwright,
       });
