@@ -39,6 +39,9 @@ function NotConnectedFallback() {
 declare const __APP_VERSION__: string;
 const RIGHT_PANEL_MODE_STORAGE_KEY = 'studio.rightPanelMode';
 type ReplayableCodeType = 'markdown' | 'yaml';
+type StudioExternalRunRequest = ExternalRunRequest & {
+  targetSignature: string | null;
+};
 
 function PlaygroundModeIcon() {
   return (
@@ -109,18 +112,29 @@ function readPersistedRightPanelMode(): StudioRecorderPanelMode {
 function createExternalRunRequest(
   value: FormValue,
   displayContent: string,
-): ExternalRunRequest {
+  targetSignature: string | null,
+): StudioExternalRunRequest {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     value,
     displayContent,
+    targetSignature,
   };
+}
+
+export function createStudioPlaygroundStorageNamespace(
+  targetSignature: string | null,
+): string {
+  return targetSignature
+    ? `studio-playground-${encodeURIComponent(targetSignature)}`
+    : 'studio-playground-unresolved-target';
 }
 
 export function createStudioPlaygroundConfig(
   options: {
     externalRunRequest?: ExternalRunRequest | null;
     importReplayAction?: ReactNode;
+    storageNamespace?: string;
   } = {},
 ): Partial<UniversalPlaygroundConfig> {
   return {
@@ -128,6 +142,7 @@ export function createStudioPlaygroundConfig(
     externalRunRequest: options.externalRunRequest ?? null,
     onDownloadReport: downloadStudioReport,
     showClearButton: true,
+    storageNamespace: options.storageNamespace,
     promptInputChrome: {
       variant: 'default',
       inputActions: options.importReplayAction,
@@ -140,9 +155,13 @@ export default function Playground() {
   const recorder = useStudioRecorder();
   const stopRecording = recorder.stopRecording;
   const [externalRunRequest, setExternalRunRequest] =
-    useState<ExternalRunRequest | null>(null);
+    useState<StudioExternalRunRequest | null>(null);
   const [rightPanelMode, setRightPanelMode] = useState<StudioRecorderPanelMode>(
     readPersistedRightPanelMode,
+  );
+  const currentTargetSignature = useMemo(
+    () => createStudioRecorderTargetSignature(recorder.currentTarget),
+    [recorder.currentTarget],
   );
   const showPlaygroundPanel = useCallback(() => {
     setRightPanelMode('playground');
@@ -151,9 +170,26 @@ export default function Playground() {
   const triggerExternalRun = useCallback(
     (value: FormValue, displayContent: string) => {
       showPlaygroundPanel();
-      setExternalRunRequest(createExternalRunRequest(value, displayContent));
+      setExternalRunRequest(
+        createExternalRunRequest(value, displayContent, currentTargetSignature),
+      );
     },
-    [showPlaygroundPanel],
+    [currentTargetSignature, showPlaygroundPanel],
+  );
+  useEffect(() => {
+    setExternalRunRequest(null);
+  }, [currentTargetSignature]);
+  const activeExternalRunRequest = useMemo(
+    () =>
+      currentTargetSignature &&
+      externalRunRequest?.targetSignature === currentTargetSignature
+        ? externalRunRequest
+        : null,
+    [currentTargetSignature, externalRunRequest],
+  );
+  const playgroundStorageNamespace = useMemo(
+    () => createStudioPlaygroundStorageNamespace(currentTargetSignature),
+    [currentTargetSignature],
   );
   const importReplayDisabledReason =
     studioPlayground.phase !== 'ready' ||
@@ -214,10 +250,11 @@ export default function Playground() {
   const playgroundConfig = useMemo(
     () =>
       createStudioPlaygroundConfig({
-        externalRunRequest,
+        externalRunRequest: activeExternalRunRequest,
         importReplayAction,
+        storageNamespace: playgroundStorageNamespace,
       }),
-    [externalRunRequest, importReplayAction],
+    [activeExternalRunRequest, importReplayAction, playgroundStorageNamespace],
   );
   const modeMenuItems = useMemo(
     () => [

@@ -1,8 +1,9 @@
 import type { IModelConfig } from '@midscene/shared/env';
+import type { MidsceneRecorderEvent } from '@midscene/shared/recorder';
 import type { StudioRecorderCodeType } from '@shared/electron-contract';
 import { toStudioRecorderCodegenInput } from './codegen-adapter';
 import { resolveStudioRecorderModelConfig } from './model-config';
-import type { StudioRecordingSession } from './types';
+import type { StudioRecorderTarget, StudioRecordingSession } from './types';
 
 function normalizeGeneratedCode(content: string, type: StudioRecorderCodeType) {
   const trimmed = content.trim();
@@ -120,4 +121,31 @@ export async function generateStudioRecorderMetadataWithAI(
     },
     modelConfig: toSerializableModelConfig(modelConfig),
   });
+}
+
+export async function describeStudioRecorderEventsWithAI(
+  events: MidsceneRecorderEvent[],
+  options: {
+    target?: StudioRecorderTarget;
+    modelConfig?: IModelConfig;
+  } = {},
+) {
+  if (events.length === 0) {
+    return [];
+  }
+
+  const runtime = requireStudioRuntime();
+  if (typeof runtime.describeRecorderUIEvents !== 'function') {
+    throw new Error('Studio recorder event describer bridge is unavailable.');
+  }
+
+  const modelConfig = resolveStudioRecorderModelConfig(options.modelConfig);
+  const result = await runtime.describeRecorderUIEvents({
+    input: {
+      target: options.target,
+      events,
+    },
+    modelConfig: toSerializableModelConfig(modelConfig),
+  });
+  return result.events;
 }

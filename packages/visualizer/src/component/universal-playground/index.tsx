@@ -30,6 +30,8 @@ import {
 } from './providers/storage-provider';
 
 const { Text } = Typography;
+const handledExternalRunRequestIds = new Set<string>();
+const MAX_HANDLED_EXTERNAL_RUN_REQUEST_IDS = 100;
 
 // Function to get stable ID for SDK (adapter-driven)
 function getSDKId(sdk: any): string {
@@ -151,6 +153,7 @@ export function UniversalPlayground({
     effectiveStorage,
     contextProvider,
     branding.targetName,
+    !componentConfig.storageNamespace,
   );
 
   // Use execution hook
@@ -201,6 +204,7 @@ export function UniversalPlayground({
       !request ||
       !shouldExecuteExternalRunRequest({
         request,
+        handledRequestIds: handledExternalRunRequestIds,
         lastRequestId: lastExternalRunRequestIdRef.current,
         sdkReady,
         messagesInitialized,
@@ -209,6 +213,17 @@ export function UniversalPlayground({
       return;
     }
     lastExternalRunRequestIdRef.current = request.id;
+    handledExternalRunRequestIds.add(request.id);
+    if (
+      handledExternalRunRequestIds.size > MAX_HANDLED_EXTERNAL_RUN_REQUEST_IDS
+    ) {
+      const oldestRequestId = handledExternalRunRequestIds
+        .values()
+        .next().value;
+      if (oldestRequestId) {
+        handledExternalRunRequestIds.delete(oldestRequestId);
+      }
+    }
     executeAction(request.value, {
       displayContent: request.displayContent,
     }).catch((error) => {

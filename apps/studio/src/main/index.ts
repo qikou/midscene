@@ -679,6 +679,15 @@ const registerIpcHandlers = () => {
     },
   );
   ipcMain.handle(
+    IPC_CHANNELS.describeRecorderUIEvents,
+    async (_event, request) => {
+      const { describeRecorderUIEventsInMain } = await import(
+        './recorder/codegen'
+      );
+      return describeRecorderUIEventsInMain(request);
+    },
+  );
+  ipcMain.handle(
     IPC_CHANNELS.prepareRecorderMarkdownReplay,
     async (_event, request) => prepareRecorderMarkdownReplayBundle(request),
   );

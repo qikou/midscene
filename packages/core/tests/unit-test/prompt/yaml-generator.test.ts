@@ -108,8 +108,9 @@ describe('yaml-generator', () => {
         events: [
           {
             type: 'click',
-            source: 'computer-native',
+            source: 'studio-preview',
             actionType: 'Click',
+            elementDescription: 'Use documentation link',
             elementRect: { x: 73, y: 1071 },
             pageInfo: { width: 1080, height: 1920 },
             timestamp: 1000,
@@ -127,7 +128,7 @@ describe('yaml-generator', () => {
       'Preserve this exact top-level target platform: computer',
     );
     expect(prompt?.[1]?.content).toContain('computer:\n  displayId: "2"');
-    expect(prompt?.[1]?.content).toContain('Click (73, 1071)');
+    expect(prompt?.[1]?.content).toContain('Use documentation link');
   });
 
   it('preserves platform-aware prompt for streaming recorder YAML generation', async () => {

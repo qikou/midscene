@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { toStudioRecorderCodegenInput } from '../src/renderer/recorder/codegen-adapter';
-import { mapPageRecorderEventToStudioRecordedEvent } from '../src/renderer/recorder/event-mapper';
+import { mapPreviewRecorderEventToStudioRecordedEvent } from '../src/renderer/recorder/event-mapper';
 import { generateStudioRecorderYaml } from '../src/renderer/recorder/export';
 import {
   createRecorderMarkdownReplayRequest,
   getRecorderYamlReplayContent,
 } from '../src/renderer/recorder/replay';
-import { resolveStudioRecorderTarget } from '../src/renderer/recorder/selectors';
+import {
+  filterStudioRecorderSessionsForTarget,
+  resolveStudioRecorderTarget,
+} from '../src/renderer/recorder/selectors';
 import type { StudioRecordingSession } from '../src/renderer/recorder/types';
 
 describe('studio recorder selectors', () => {
@@ -82,10 +85,52 @@ describe('studio recorder selectors', () => {
       )?.values,
     ).toEqual({ displayId: '1' });
   });
+
+  it('filters recording history by the current target', () => {
+    const webTarget = {
+      platformId: 'web' as const,
+      deviceId: 'https://example.com',
+      label: 'Example',
+      values: { url: 'https://example.com' },
+    };
+    const androidTarget = {
+      platformId: 'android' as const,
+      deviceId: 'emulator-5554',
+      label: 'Pixel',
+      values: { deviceId: 'emulator-5554' },
+    };
+    const sessions = [
+      {
+        id: 'web-session',
+        name: 'web',
+        status: 'completed' as const,
+        createdAt: 1,
+        updatedAt: 1,
+        target: webTarget,
+        events: [],
+      },
+      {
+        id: 'android-session',
+        name: 'android',
+        status: 'completed' as const,
+        createdAt: 2,
+        updatedAt: 2,
+        target: androidTarget,
+        events: [],
+      },
+    ];
+
+    expect(
+      filterStudioRecorderSessionsForTarget(sessions, androidTarget).map(
+        (session) => session.id,
+      ),
+    ).toEqual(['android-session']);
+    expect(filterStudioRecorderSessionsForTarget(sessions, null)).toEqual([]);
+  });
 });
 
 describe('studio recorder event mapper', () => {
-  it('maps injected page recorder events into studio recorded events', () => {
+  it('maps preview recorder events into studio recorded events', () => {
     const target = {
       platformId: 'web' as const,
       deviceId: 'https://example.com',
@@ -94,7 +139,7 @@ describe('studio recorder event mapper', () => {
     };
 
     expect(
-      mapPageRecorderEventToStudioRecordedEvent({
+      mapPreviewRecorderEventToStudioRecordedEvent({
         target,
         event: {
           type: 'navigation',
@@ -117,7 +162,7 @@ describe('studio recorder event mapper', () => {
     });
 
     expect(
-      mapPageRecorderEventToStudioRecordedEvent({
+      mapPreviewRecorderEventToStudioRecordedEvent({
         target,
         event: {
           type: 'click',
@@ -136,7 +181,7 @@ describe('studio recorder event mapper', () => {
     });
   });
 
-  it('maps platform-native recorder events without DOM metadata', () => {
+  it('maps preview recorder events without DOM metadata', () => {
     const target = {
       platformId: 'computer' as const,
       deviceId: '2',
@@ -145,11 +190,11 @@ describe('studio recorder event mapper', () => {
     };
 
     expect(
-      mapPageRecorderEventToStudioRecordedEvent({
+      mapPreviewRecorderEventToStudioRecordedEvent({
         target,
         event: {
           type: 'scroll',
-          source: 'computer-native',
+          source: 'studio-preview',
           actionType: 'Scroll',
           rawPayload: { deltaX: 0, deltaY: -285 },
           value: '0,-285',

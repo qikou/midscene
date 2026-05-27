@@ -95,6 +95,10 @@ function eventDescription(event: StudioRecordedEvent) {
   return getMidsceneRecorderEventDescription(event);
 }
 
+function isPendingRecorderDescription(value?: string) {
+  return value?.trim() === 'AI is analyzing element...';
+}
+
 function markdownZipPath(relativePath: string) {
   return relativePath.replace(/^\.\//, '');
 }
@@ -187,7 +191,8 @@ function stepText(event: StudioRecordedEvent) {
     case 'navigation':
       return event.url ? `Open ${event.url}` : description;
     case 'click':
-      return event.elementDescription
+      return event.elementDescription &&
+        !isPendingRecorderDescription(event.elementDescription)
         ? `Tap "${description}"`
         : `Tap the target shown in the screenshot. Recorded hint: ${description}`;
     case 'input':

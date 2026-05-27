@@ -20,6 +20,7 @@ export function usePlaygroundState(
   storage?: StorageProvider | null,
   contextProvider?: ContextProvider,
   targetName?: string,
+  loadDefaultNamespaceFallback = true,
 ) {
   // Core state
   const [loading, setLoading] = useState(false);
@@ -69,6 +70,10 @@ export function usePlaygroundState(
     };
 
     const migrateFromOldNamespace = async (): Promise<InfoListItem[]> => {
+      if (!loadDefaultNamespaceFallback) {
+        return [];
+      }
+
       // Try to load from old default namespace
       const oldStorage = createStorageProvider(
         detectBestStorageType(),
@@ -148,7 +153,7 @@ export function usePlaygroundState(
     return () => {
       cancelled = true;
     };
-  }, [storage]); // Add storage to dependency array
+  }, [loadDefaultNamespaceFallback, storage]); // Add storage to dependency array
 
   // Save messages to storage when they change
   useEffect(() => {

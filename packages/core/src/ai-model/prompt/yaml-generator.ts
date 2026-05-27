@@ -36,9 +36,14 @@ export interface ProcessedEvent {
   timestamp: number;
   source?: string;
   actionType?: string;
+  descriptionSource?: string;
+  descriptionError?: string;
   url?: string;
   title?: string;
   elementDescription?: string;
+  replayInstruction?: string;
+  actionSummary?: string;
+  semanticConfidence?: string;
   description?: string;
   value?: string;
   pageInfo?: any;
@@ -88,6 +93,10 @@ export interface FilteredEvents {
 
 // Common utility functions (shared between YAML and Playwright generators)
 
+function cleanRecorderSemanticField(value?: string) {
+  return value?.trim() === 'AI is analyzing element...' ? undefined : value;
+}
+
 /**
  * Get screenshots from events for LLM context
  */
@@ -136,7 +145,7 @@ export const extractInputDescriptions = (
 ): InputDescription[] => {
   return inputEvents
     .map((event) => ({
-      description: event.elementDescription || '',
+      description: cleanRecorderSemanticField(event.elementDescription) || '',
       value: event.value || '',
     }))
     .filter((item) => item.description && item.value);
@@ -153,9 +162,14 @@ export const processEventsForLLM = (
     timestamp: event.timestamp,
     source: event.source,
     actionType: event.actionType,
+    descriptionSource: event.descriptionSource,
+    descriptionError: event.descriptionError,
     url: event.url,
     title: event.title,
-    elementDescription: event.elementDescription,
+    elementDescription: cleanRecorderSemanticField(event.elementDescription),
+    replayInstruction: cleanRecorderSemanticField(event.replayInstruction),
+    actionSummary: cleanRecorderSemanticField(event.actionSummary),
+    semanticConfidence: event.semanticConfidence,
     description: getMidsceneRecorderEventDescription(event),
     value: event.value,
     pageInfo: event.pageInfo,
@@ -286,11 +300,13 @@ ${JSON.stringify(yamlSummary, null, 2)}
 
 Convert events:
 - navigation → target URL or aiAction only when the target platform supports it
-- click → aiTap with element description
-- input → aiInput with value and locate
-- scroll → aiScroll with appropriate direction
+- click → aiTap with the semantic element description
+- input → aiInput with value and semantic locate
+- scroll → aiScroll with appropriate direction and semantic scroll area
 - keydown → aiKeyboardPress
-- Add aiAssert for important state changes${getYamlLanguageInstruction(language)}
+- Add aiAssert for important state changes
+- Prefer event.replayInstruction and event.elementDescription when descriptionSource is "ai".
+- If descriptionSource is "fallback", use the screenshot/context to write the best visual instruction, and avoid raw coordinates unless there is no reliable semantic description.${getYamlLanguageInstruction(language)}
 
 Important: Return ONLY the raw YAML content. Do NOT wrap the response in markdown code blocks (no \`\`\`yaml or \`\`\`). Start directly with the YAML content.`,
     },

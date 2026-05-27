@@ -3,7 +3,11 @@ import type { StudioRecorderCodeType } from '@shared/electron-contract';
 import { Tooltip, message } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStudioPlayground } from '../../playground/useStudioPlayground';
-import { createStudioRecorderTargetSignature } from '../../recorder/selectors';
+import {
+  createStudioRecorderTargetSignature,
+  filterStudioRecorderSessionsForTarget,
+  isStudioRecorderSessionForTarget,
+} from '../../recorder/selectors';
 import type {
   StudioRecorderGenerationProgress,
   StudioRecorderGenerationStepId,
@@ -333,6 +337,10 @@ export function StudioRecorderPanel({
     exportAllZip,
   } = recorder;
   const sessions = state.sessions;
+  const visibleSessions = useMemo(
+    () => filterStudioRecorderSessionsForTarget(sessions, currentTarget),
+    [currentTarget, sessions],
+  );
   const currentTargetSignature = useMemo(
     () => createStudioRecorderTargetSignature(currentTarget),
     [currentTarget],
@@ -359,12 +367,22 @@ export function StudioRecorderPanel({
 
   const detailSession = useMemo(() => {
     const selectedSession =
-      sessions.find((session) => session.id === detailSessionId) ?? null;
+      visibleSessions.find((session) => session.id === detailSessionId) ?? null;
     if (selectedSession) {
       return selectedSession;
     }
-    return state.isRecording ? currentSession : null;
-  }, [currentSession, detailSessionId, sessions, state.isRecording]);
+    return state.isRecording &&
+      currentSession &&
+      isStudioRecorderSessionForTarget(currentSession, currentTarget)
+      ? currentSession
+      : null;
+  }, [
+    currentSession,
+    currentTarget,
+    detailSessionId,
+    state.isRecording,
+    visibleSessions,
+  ]);
   const activeCodeType = getAvailableCodeType(detailSession, selectedCodeType);
   const activeGeneratedCode =
     detailSession?.generatedCode?.[activeCodeType] || '';
@@ -477,12 +495,12 @@ export function StudioRecorderPanel({
   useEffect(() => {
     if (
       detailSessionId &&
-      !sessions.some((session) => session.id === detailSessionId)
+      !visibleSessions.some((session) => session.id === detailSessionId)
     ) {
       setDetailSessionId(null);
       setActiveTab('timeline');
     }
-  }, [detailSessionId, sessions]);
+  }, [detailSessionId, visibleSessions]);
 
   useEffect(() => {
     if (
@@ -641,7 +659,7 @@ export function StudioRecorderPanel({
   }, [activeCode, codeLabel]);
 
   const renderList = () => {
-    if (sessions.length === 0) {
+    if (visibleSessions.length === 0) {
       return (
         <div className="studio-recorder-empty">
           No recordings yet. Start a new recording after a device is live.
@@ -651,7 +669,7 @@ export function StudioRecorderPanel({
 
     return (
       <div className="studio-recorder-list">
-        {sessions.map((session) => (
+        {visibleSessions.map((session) => (
           <article
             className="studio-recorder-card"
             key={session.id}

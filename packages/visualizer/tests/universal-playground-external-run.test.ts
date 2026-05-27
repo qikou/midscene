@@ -40,4 +40,16 @@ describe('shouldExecuteExternalRunRequest', () => {
       }),
     ).toBe(false);
   });
+
+  it('does not execute a request already handled by another playground instance', () => {
+    expect(
+      shouldExecuteExternalRunRequest({
+        request,
+        handledRequestIds: new Set(['replay-1']),
+        lastRequestId: null,
+        sdkReady: true,
+        messagesInitialized: true,
+      }),
+    ).toBe(false);
+  });
 });

@@ -1,6 +1,7 @@
 import {
   type ChatCompletionMessageParam,
   callAIWithObjectResponse,
+  describeRecorderUIEvents,
   generatePlaywrightTest,
   generateRecorderMarkdownReplay,
   generateRecorderYamlTest,
@@ -10,6 +11,8 @@ import {
   getMidsceneRecorderScreenshotsForLLM,
 } from '@midscene/shared/recorder';
 import type {
+  DescribeRecorderUIEventsRequest,
+  DescribeRecorderUIEventsResult,
   GenerateRecorderCodeRequest,
   GenerateRecorderCodeResult,
   GenerateRecorderMetadataRequest,
@@ -150,6 +153,9 @@ function summarizeRecorderEvents(request: GenerateRecorderMetadataRequest) {
       value: event.value,
       description: getMidsceneRecorderEventDescription(event),
       elementDescription: event.elementDescription,
+      replayInstruction: event.replayInstruction,
+      actionSummary: event.actionSummary,
+      semanticConfidence: event.semanticConfidence,
     })),
   };
 }
@@ -219,5 +225,38 @@ Respond with a JSON object containing exactly "title" and "description".`,
   return {
     title: normalizeMetadataValue(response.content.title),
     description: normalizeMetadataValue(response.content.description),
+  };
+}
+
+export async function describeRecorderUIEventsInMain(
+  request: DescribeRecorderUIEventsRequest,
+): Promise<DescribeRecorderUIEventsResult> {
+  if (!request?.input?.events?.length) {
+    return { events: [], results: [] };
+  }
+  if (!request.modelConfig?.modelName) {
+    throw new Error(
+      'describeRecorderUIEvents: modelConfig.modelName is required.',
+    );
+  }
+
+  const results = await describeRecorderUIEvents(
+    request.input.events.map((event) => ({
+      event,
+      target: request.input.target,
+    })),
+    request.modelConfig,
+    {
+      concurrency: 2,
+    },
+  );
+
+  return {
+    events: results.map((result) => result.event),
+    results: results.map((result) => ({
+      hashId: result.event.hashId,
+      usedFallback: result.usedFallback,
+      ...(result.error ? { error: result.error } : {}),
+    })),
   };
 }

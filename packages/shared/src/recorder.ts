@@ -8,9 +8,7 @@ export type MidsceneRecorderEventType =
   | 'keydown';
 
 export type MidsceneRecorderSourceKind =
-  | 'web-dom'
   | 'studio-preview'
-  | 'computer-native'
   | 'unsupported'
   | (string & {});
 
@@ -49,7 +47,12 @@ export interface MidsceneRecorderEvent {
   screenshotBefore?: string;
   screenshotAfter?: string;
   elementDescription?: string;
+  replayInstruction?: string;
+  actionSummary?: string;
+  semanticConfidence?: 'high' | 'medium' | 'low';
   descriptionLoading?: boolean;
+  descriptionSource?: 'ai' | 'fallback';
+  descriptionError?: string;
   screenshotWithBox?: string;
   timestamp: number;
   hashId: string;
@@ -84,14 +87,35 @@ export interface MidsceneRecorderMarkdownScreenshotOptions {
   maxScreenshots?: number;
 }
 
+export const DEFAULT_MIDSCENE_RECORDER_MARKDOWN_MAX_SCREENSHOTS = 20;
+
+function isMidsceneRecorderPendingDescription(value?: string) {
+  return value?.trim() === 'AI is analyzing element...';
+}
+
 export function getMidsceneRecorderEventDescription(
   event: MidsceneRecorderEvent,
 ) {
+  if (
+    event.actionSummary &&
+    !isMidsceneRecorderPendingDescription(event.actionSummary)
+  ) {
+    return event.actionSummary;
+  }
+  if (
+    event.elementDescription &&
+    !isMidsceneRecorderPendingDescription(event.elementDescription)
+  ) {
+    return event.elementDescription;
+  }
+  if (
+    event.replayInstruction &&
+    !isMidsceneRecorderPendingDescription(event.replayInstruction)
+  ) {
+    return event.replayInstruction;
+  }
   if (event.type === 'navigation' && event.url) {
     return `Navigate to ${event.url}`;
-  }
-  if (event.elementDescription) {
-    return event.elementDescription;
   }
   if (event.value) {
     return event.actionType
@@ -244,7 +268,9 @@ export function createMidsceneRecorderMarkdownScreenshotAssets(
   options: MidsceneRecorderMarkdownScreenshotOptions = {},
 ): MidsceneRecorderMarkdownScreenshotAsset[] {
   const baseDir = normalizeMarkdownAssetBaseDir(options.baseDir);
-  const maxScreenshots = options.maxScreenshots ?? 8;
+  const maxScreenshots =
+    options.maxScreenshots ??
+    DEFAULT_MIDSCENE_RECORDER_MARKDOWN_MAX_SCREENSHOTS;
   const assets: MidsceneRecorderMarkdownScreenshotAsset[] = [];
   const seenScreenshots = new Set<string>();
   const lastEventIndex = events.length - 1;

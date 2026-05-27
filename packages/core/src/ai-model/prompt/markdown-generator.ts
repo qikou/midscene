@@ -1,5 +1,6 @@
 import type { IModelConfig } from '@midscene/shared/env';
 import {
+  DEFAULT_MIDSCENE_RECORDER_MARKDOWN_MAX_SCREENSHOTS,
   createMidsceneRecorderMarkdownScreenshotAssets,
   getMidsceneRecorderEventDescription,
   stringifyMidsceneRecorderTargetBlock,
@@ -39,9 +40,11 @@ function createEventPromptItems(
   input: RecorderMarkdownGenerationInput,
   screenshotPathByEventHash: Map<string, string>,
 ): Array<ProcessedEvent & { screenshotPath?: string }> {
+  const maxScreenshots =
+    input.maxScreenshots ?? DEFAULT_MIDSCENE_RECORDER_MARKDOWN_MAX_SCREENSHOTS;
   return prepareEventSummary(input.events, {
     testName: input.testName,
-    maxScreenshots: input.maxScreenshots || 8,
+    maxScreenshots,
   }).events.map((event, index) => ({
     ...event,
     screenshotPath: screenshotPathByEventHash.get(
@@ -59,7 +62,9 @@ export function createRecorderMarkdownReplayPrompt(
     input.events,
     {
       baseDir: './screenshots',
-      maxScreenshots: input.maxScreenshots ?? 8,
+      maxScreenshots:
+        input.maxScreenshots ??
+        DEFAULT_MIDSCENE_RECORDER_MARKDOWN_MAX_SCREENSHOTS,
     },
   );
   const screenshotPathByEventHash = new Map(
@@ -67,7 +72,9 @@ export function createRecorderMarkdownReplayPrompt(
   );
   const summary = prepareEventSummary(input.events, {
     testName: input.testName,
-    maxScreenshots: input.maxScreenshots || 8,
+    maxScreenshots:
+      input.maxScreenshots ??
+      DEFAULT_MIDSCENE_RECORDER_MARKDOWN_MAX_SCREENSHOTS,
   });
   const promptEvents = createEventPromptItems(input, screenshotPathByEventHash);
   const promptText = `Generate a Markdown replay script for Midscene Agent.
@@ -89,6 +96,8 @@ Replay goal:
 - Do not invent alternative navigation paths.
 - Do not skip, merge, reorder, or add extra user actions.
 - Prefer recorded UI text, element descriptions, URLs, input values, and scroll direction.
+- Prefer event.replayInstruction and event.elementDescription when descriptionSource is "ai".
+- If descriptionSource is "fallback", use the screenshot/context to write the best visual instruction.
 - Coordinates are only fallback hints. Do not make coordinates the primary instruction when text or screenshots are available.
 - If a target cannot be found, stop and report the missing step. Do not click similar-looking elements.
 - Use screenshots only when they are provided below. Reference them by their exact relative paths.
