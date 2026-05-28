@@ -258,7 +258,11 @@ export default function Playground() {
   );
   const modeMenuItems = useMemo(
     () => [
-      { key: 'playground', label: 'Playground', icon: <PlaygroundModeIcon /> },
+      {
+        key: 'playground',
+        label: 'API Playground',
+        icon: <PlaygroundModeIcon />,
+      },
       { key: 'recorder', label: 'Recorder', icon: <RecorderModeIcon /> },
     ],
     [],

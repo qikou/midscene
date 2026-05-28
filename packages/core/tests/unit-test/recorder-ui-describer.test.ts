@@ -70,10 +70,10 @@ describe('recorder-ui-describer', () => {
       'Recorder event has no screenshot.',
     );
     expect(result.event.elementDescription).toBe(
-      'target element in the current visible UI',
+      'control on the current desktop screen',
     );
     expect(result.event.replayInstruction).toBe(
-      'Click on the element described as "target element in the current visible UI".',
+      'Click on the element described as "control on the current desktop screen".',
     );
     expect(result.event.semanticConfidence).toBe('low');
   });
@@ -147,9 +147,154 @@ describe('recorder-ui-describer', () => {
     expect(result.event.descriptionError).toBe(
       'AI returned a weak recorder event description.',
     );
-    expect(result.event.elementDescription).toBe(
-      'target element in Semi Design Form',
+    expect(result.event.elementDescription).toBe('control in Semi Design Form');
+  });
+
+  it.each([
+    [
+      'Tap',
+      'Tap on the element described as "Settings menu item".',
+      'Tap Settings menu item',
+    ],
+    [
+      'DoubleClick',
+      'Double click on the element described as "Settings menu item".',
+      'Double click Settings menu item',
+    ],
+    [
+      'LongPress',
+      'Long press the element described as "Settings menu item".',
+      'Long press Settings menu item',
+    ],
+    [
+      'RightClick',
+      'Right click on the element described as "Settings menu item".',
+      'Right click Settings menu item',
+    ],
+  ])(
+    'preserves %s semantics in generated fallback replay text',
+    async (actionType, replayInstruction, actionSummary) => {
+      vi.mocked(callAIWithObjectResponse).mockResolvedValueOnce({
+        content: {
+          elementDescription: 'Settings menu item',
+          confidence: 'high',
+        },
+      } as any);
+
+      const result = await describeRecorderUIEvent(
+        {
+          event: {
+            type: 'click',
+            actionType,
+            source: 'studio-preview',
+            timestamp: 1000,
+            hashId: `click-${actionType}`,
+            pageInfo: { width: 1280, height: 720 },
+            elementRect: { x: 537, y: 450 },
+            screenshotWithBox: screenshot,
+          },
+        },
+        modelConfig,
+        { maxRetries: 1 },
+      );
+
+      expect(result.usedFallback).toBe(false);
+      expect(result.event.replayInstruction).toBe(replayInstruction);
+      expect(result.event.actionSummary).toBe(actionSummary);
+    },
+  );
+
+  it.each([
+    [
+      'Tap',
+      'Tap on the element described as "Settings menu item".',
+      'Tap Settings menu item',
+    ],
+    [
+      'DoubleClick',
+      'Double click on the element described as "Settings menu item".',
+      'Double click Settings menu item',
+    ],
+    [
+      'LongPress',
+      'Long press the element described as "Settings menu item".',
+      'Long press Settings menu item',
+    ],
+    [
+      'RightClick',
+      'Right click on the element described as "Settings menu item".',
+      'Right click Settings menu item',
+    ],
+  ])(
+    'rewrites AI click replay text to preserve %s semantics',
+    async (actionType, replayInstruction, actionSummary) => {
+      vi.mocked(callAIWithObjectResponse).mockResolvedValueOnce({
+        content: {
+          elementDescription: 'Settings menu item',
+          replayInstruction:
+            'Click on the element described as "Settings menu item".',
+          actionSummary: 'Click Settings menu item',
+          confidence: 'high',
+        },
+      } as any);
+
+      const result = await describeRecorderUIEvent(
+        {
+          event: {
+            type: 'click',
+            actionType,
+            source: 'studio-preview',
+            timestamp: 1000,
+            hashId: `click-ai-${actionType}`,
+            pageInfo: { width: 1280, height: 720 },
+            elementRect: { x: 537, y: 450 },
+            screenshotWithBox: screenshot,
+          },
+        },
+        modelConfig,
+        { maxRetries: 1 },
+      );
+
+      expect(result.usedFallback).toBe(false);
+      expect(result.event.replayInstruction).toBe(replayInstruction);
+      expect(result.event.actionSummary).toBe(actionSummary);
+    },
+  );
+
+  it('rewrites AI drag replay text to preserve Swipe semantics', async () => {
+    vi.mocked(callAIWithObjectResponse).mockResolvedValueOnce({
+      content: {
+        elementDescription: 'Notifications list',
+        replayInstruction:
+          'Drag through the area described as "Notifications list".',
+        actionSummary: 'Drag Notifications list',
+        confidence: 'high',
+      },
+    } as any);
+
+    const result = await describeRecorderUIEvent(
+      {
+        event: {
+          type: 'drag',
+          actionType: 'Swipe',
+          source: 'studio-preview',
+          timestamp: 1000,
+          hashId: 'swipe-ai-drag',
+          value: 'down 509',
+          pageInfo: { width: 1280, height: 720 },
+          elementRect: { x: 537, y: 450 },
+          screenshotWithBox: screenshot,
+        },
+      },
+      modelConfig,
+      { maxRetries: 1 },
     );
+
+    expect(result.usedFallback).toBe(false);
+    expect(result.event.replayInstruction).toBe(
+      'Swipe through the area described as "Notifications list".',
+    );
+    expect(result.event.actionSummary).toBe('Swipe Notifications list');
   });
 
   it('accepts semantic scroll descriptions with page context', async () => {
@@ -232,6 +377,46 @@ describe('recorder-ui-describer', () => {
     );
   });
 
+  it('rejects scroll descriptions with a generic destination', async () => {
+    vi.mocked(callAIWithObjectResponse).mockResolvedValueOnce({
+      content: {
+        elementDescription: 'Android settings page',
+        scrollDestinationDescription: 'more content',
+        replayInstruction:
+          'Scroll the page/region with description "Android settings page" by value "down 509" until "more content" is visible.',
+        actionSummary: 'Scroll Android settings page toward more content',
+        confidence: 'medium',
+      },
+    } as any);
+
+    const result = await describeRecorderUIEvent(
+      {
+        event: {
+          type: 'scroll',
+          source: 'studio-preview',
+          timestamp: 1000,
+          hashId: 'scroll-generic-destination',
+          value: 'down 509',
+          pageInfo: { width: 1280, height: 720 },
+          elementRect: { x: 600, y: 520 },
+          title: 'Android settings',
+          screenshotWithBox: screenshot,
+          screenshotAfter: screenshot,
+        },
+      },
+      modelConfig,
+      { maxRetries: 1 },
+    );
+
+    expect(result.usedFallback).toBe(true);
+    expect(result.event.descriptionError).toBe(
+      'AI returned a scroll description without a destination.',
+    );
+    expect(result.event.elementDescription).toBe(
+      'Android settings scrollable content',
+    );
+  });
+
   it('accepts semantic input field descriptions and preserves the typed value', async () => {
     vi.mocked(callAIWithObjectResponse).mockResolvedValueOnce({
       content: {
@@ -270,6 +455,123 @@ describe('recorder-ui-describer', () => {
       'Input "2" into the element described as "数量 input in the basic form".',
     );
   });
+
+  it('rejects input field descriptions that use the typed value as the field name', async () => {
+    vi.mocked(callAIWithObjectResponse).mockResolvedValueOnce({
+      content: {
+        elementDescription: '"hello" input',
+        replayInstruction:
+          'Input "hello" into the element described as "hello input".',
+        actionSummary: 'Input into hello input',
+        confidence: 'medium',
+      },
+    } as any);
+
+    const result = await describeRecorderUIEvent(
+      {
+        event: {
+          type: 'input',
+          source: 'studio-preview',
+          timestamp: 1000,
+          hashId: 'input-value-as-field',
+          value: 'hello',
+          pageInfo: { width: 1280, height: 720 },
+          elementRect: { x: 537, y: 450 },
+          title: 'Search Page',
+          screenshotWithBox: screenshot,
+          screenshotAfter: screenshot,
+        },
+      },
+      modelConfig,
+      { maxRetries: 1 },
+    );
+
+    expect(result.usedFallback).toBe(true);
+    expect(result.event.descriptionError).toBe(
+      'AI used the recorded input value as the field description.',
+    );
+    expect(result.event.elementDescription).toBe('input field in Search Page');
+  });
+
+  it('rejects weak replay instructions that reference highlighted markers', async () => {
+    vi.mocked(callAIWithObjectResponse).mockResolvedValueOnce({
+      content: {
+        elementDescription: 'Save button',
+        replayInstruction: 'Click the highlighted element in the red marker.',
+        actionSummary: 'Click highlighted element',
+        confidence: 'medium',
+      },
+    } as any);
+
+    const result = await describeRecorderUIEvent(
+      {
+        event: {
+          type: 'click',
+          actionType: 'Tap',
+          source: 'studio-preview',
+          timestamp: 1000,
+          hashId: 'click-highlighted-marker',
+          pageInfo: { width: 1280, height: 720 },
+          elementRect: { x: 537, y: 450 },
+          title: 'Settings',
+          screenshotWithBox: screenshot,
+        },
+      },
+      modelConfig,
+      { maxRetries: 1 },
+    );
+
+    expect(result.usedFallback).toBe(true);
+    expect(result.event.descriptionError).toBe(
+      'AI returned a weak recorder replay instruction.',
+    );
+    expect(result.event.elementDescription).toBe('control in Settings');
+  });
+
+  it.each([
+    ['web', 'For web targets'],
+    ['android', 'For mobile targets'],
+    ['computer', 'For desktop/computer targets'],
+  ])(
+    'includes platform-aware guidance for %s targets',
+    async (platformId, expectedGuidance) => {
+      vi.mocked(callAIWithObjectResponse).mockResolvedValueOnce({
+        content: {
+          elementDescription: 'Save button',
+          replayInstruction: 'Tap on the element described as "Save button".',
+          actionSummary: 'Tap Save button',
+          confidence: 'high',
+        },
+      } as any);
+
+      const result = await describeRecorderUIEvent(
+        {
+          event: {
+            type: 'click',
+            actionType: 'Tap',
+            source: 'studio-preview',
+            timestamp: 1000,
+            hashId: `click-${platformId}`,
+            pageInfo: { width: 1280, height: 720 },
+            elementRect: { x: 537, y: 450 },
+            screenshotWithBox: screenshot,
+          },
+          target: {
+            platformId,
+            label: platformId,
+            values: {},
+          },
+        },
+        modelConfig,
+        { maxRetries: 1 },
+      );
+
+      const calls = vi.mocked(callAIWithObjectResponse).mock.calls;
+      const prompt = calls[calls.length - 1]?.[0];
+      expect(result.usedFallback).toBe(false);
+      expect(JSON.stringify(prompt)).toContain(expectedGuidance);
+    },
+  );
 
   it('rejects pending placeholder descriptions returned by AI', async () => {
     vi.mocked(callAIWithObjectResponse).mockResolvedValueOnce({

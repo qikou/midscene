@@ -54,6 +54,8 @@ export interface MainContentProps {
   modelEnvText?: string;
   /** Opens the model env config modal anchored in the shell. */
   onOpenEnvModal?: () => void;
+  /** Left inset reserved by the collapsed shell titlebar controls. */
+  titlebarInsetLeft?: number;
 }
 
 function RefreshIcon({ spinning }: { spinning?: boolean }) {
@@ -234,17 +236,17 @@ function OverviewToolbar({
   // explicitly opt back out via `app-no-drag` or the OS swallows hover
   // and click events.
   return (
-    <div className="app-no-drag absolute right-[16px] top-[10px] z-10 flex items-center gap-[8px]">
+    <>
       <button
         aria-label="Refresh devices"
-        className="app-no-drag flex h-[32px] w-[32px] cursor-pointer items-center justify-center rounded-[8px] border border-border-subtle bg-transparent text-text-secondary transition-colors hover:bg-surface-hover-strong hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+        className="app-no-drag absolute right-[16px] top-[10px] z-10 flex h-[32px] w-[32px] cursor-pointer items-center justify-center rounded-[8px] border border-border-subtle bg-transparent text-text-secondary transition-colors hover:bg-surface-hover-strong hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
         disabled={refreshing}
         onClick={onRefresh}
         type="button"
       >
         <RefreshIcon spinning={refreshing} />
       </button>
-    </div>
+    </>
   );
 }
 
@@ -257,6 +259,7 @@ export default function MainContent({
   modelConfigComplete = true,
   modelEnvText,
   onOpenEnvModal,
+  titlebarInsetLeft = 0,
 }: MainContentProps) {
   const studioPlayground = useStudioPlayground();
   const [previewStatus, setPreviewStatus] =
@@ -553,7 +556,7 @@ export default function MainContent({
 
     return (
       <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] bg-surface">
-        <div className="app-drag absolute left-0 right-0 top-0 z-0 h-[52px]" />
+        <div className="app-drag absolute left-0 right-0 top-0 z-0 h-[48px]" />
         <OverviewToolbar
           onRefresh={async () => {
             if (!isReady || overviewRefreshing) {
@@ -703,13 +706,18 @@ export default function MainContent({
        * on the left, and a pill-shaped status/disconnect control on the
        * right that reveals a "Disconnect" tooltip on hover.
        */}
-      <div className="app-drag relative flex h-[52px] items-center justify-between pl-[8px] pr-4 pt-[4px]">
-        <div className="flex min-w-0 flex-1 items-center gap-[8px] pt-[2px]">
-          <div className="ml-[8px] flex h-[40px] w-[40px] shrink-0 items-center justify-center overflow-hidden rounded-[6px] border border-border-subtle bg-surface-muted">
+      <div
+        className="app-drag relative flex h-[48px] items-center justify-between pl-[8px] pr-4"
+        style={
+          titlebarInsetLeft > 0 ? { paddingLeft: titlebarInsetLeft } : undefined
+        }
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-[8px]">
+          <div className="ml-[8px] flex h-[32px] w-[32px] shrink-0 items-center justify-center overflow-hidden rounded-[6px] border border-border-subtle bg-surface-muted">
             <img
               alt=""
               aria-hidden="true"
-              className="h-[36px] w-[36px] object-contain"
+              className="h-[26px] w-[26px] object-contain"
               src={resolvePlatformLogo(previewPlatform)}
             />
           </div>

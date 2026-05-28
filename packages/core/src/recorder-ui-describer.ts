@@ -64,6 +64,133 @@ function getRecorderEventAfterScreenshot(event: MidsceneRecorderEvent) {
   return event.screenshotAfter || event.screenshotWithBox;
 }
 
+function normalizeActionType(event: MidsceneRecorderEvent) {
+  return event.actionType?.trim();
+}
+
+function getPlatformId(target?: MidsceneRecorderTarget) {
+  return target?.platformId?.toLowerCase();
+}
+
+function getPlatformSurface(target?: MidsceneRecorderTarget) {
+  switch (getPlatformId(target)) {
+    case 'web':
+      return 'current web page';
+    case 'android':
+    case 'ios':
+    case 'harmony':
+      return 'current mobile screen';
+    case 'computer':
+      return 'current desktop screen';
+    default:
+      return 'current UI';
+  }
+}
+
+function getPlatformGuidance(target?: MidsceneRecorderTarget) {
+  switch (getPlatformId(target)) {
+    case 'web':
+      return 'For web targets, use web UI terms such as button, input, link, menu item, tab, dialog, aria-label, placeholder, and form section when visible or inferable.';
+    case 'android':
+    case 'ios':
+    case 'harmony':
+      return 'For mobile targets, use mobile UI terms such as tab, list item, text field, icon button, navigation bar, bottom bar, sheet, card, and screen section.';
+    case 'computer':
+      return 'For desktop/computer targets, use desktop UI terms such as menu item, toolbar button, dialog field, sidebar item, window control, file row, and application region.';
+    default:
+      return 'Use platform-neutral UI terms such as control, field, item, icon button, list item, region, panel, and page section.';
+  }
+}
+
+function getPointerActionVerb(event: MidsceneRecorderEvent) {
+  switch (normalizeActionType(event)) {
+    case 'Tap':
+      return 'Tap';
+    case 'DoubleClick':
+      return 'Double click';
+    case 'LongPress':
+      return 'Long press';
+    case 'RightClick':
+      return 'Right click';
+    default:
+      return 'Click';
+  }
+}
+
+function getDragActionVerb(event: MidsceneRecorderEvent) {
+  switch (normalizeActionType(event)) {
+    case 'Swipe':
+      return 'Swipe';
+    case 'DragAndDrop':
+      return 'Drag';
+    default:
+      return 'Drag';
+  }
+}
+
+function getActionReplayInstruction(
+  event: MidsceneRecorderEvent,
+  elementDescription: string,
+) {
+  if (event.type === 'click') {
+    const verb = getPointerActionVerb(event);
+    if (verb === 'Long press') {
+      return `${verb} the element described as "${elementDescription}".`;
+    }
+    return `${verb} on the element described as "${elementDescription}".`;
+  }
+
+  if (event.type === 'drag') {
+    const verb = getDragActionVerb(event);
+    return `${verb} through the area described as "${elementDescription}".`;
+  }
+
+  return undefined;
+}
+
+function getActionSummaryVerb(event: MidsceneRecorderEvent) {
+  if (event.type === 'click') {
+    return getPointerActionVerb(event);
+  }
+  if (event.type === 'drag') {
+    return getDragActionVerb(event);
+  }
+  if (event.type === 'keydown') {
+    return 'Press';
+  }
+  return undefined;
+}
+
+function getCanonicalReplayInstruction(
+  event: MidsceneRecorderEvent,
+  elementDescription: string,
+) {
+  switch (event.type) {
+    case 'click':
+    case 'drag':
+    case 'input':
+    case 'keydown':
+      return getFallbackReplayInstruction(event, elementDescription);
+    default:
+      return undefined;
+  }
+}
+
+function getCanonicalActionSummary(
+  event: MidsceneRecorderEvent,
+  elementDescription: string,
+) {
+  switch (event.type) {
+    case 'click':
+    case 'drag':
+    case 'input':
+    case 'keydown':
+      return getFallbackActionSummary(event, elementDescription);
+    default:
+      return undefined;
+  }
+}
+
 function pointToRect(
   x: number,
   y: number,
@@ -123,26 +250,36 @@ export function getRecorderUIEventTargetRect(
   return null;
 }
 
-function getFallbackDescription(event: MidsceneRecorderEvent) {
+function getFallbackDescription(
+  event: MidsceneRecorderEvent,
+  target?: MidsceneRecorderTarget,
+) {
+  const pageContext = getPageSemanticContext(event);
+  const surface = getPlatformSurface(target);
+
   switch (event.type) {
     case 'navigation':
       return event.url || event.value || event.actionType || 'navigation';
     case 'scroll':
-      return getPageSemanticContext(event)
-        ? `${getPageSemanticContext(event)} page or scrollable region`
-        : 'current visible page or scrollable region';
+      return pageContext
+        ? `${pageContext} scrollable content`
+        : `scrollable content on the ${surface}`;
     case 'drag':
-      return 'gesture path shown in the screenshot';
+      return pageContext
+        ? `gesture area in ${pageContext}`
+        : `gesture area on the ${surface}`;
     case 'input':
-      return getPageSemanticContext(event)
-        ? `input field in ${getPageSemanticContext(event)}`
-        : 'input field in the current visible UI';
+      return pageContext
+        ? `input field in ${pageContext}`
+        : `input field on the ${surface}`;
     case 'keydown':
-      return 'focused element shown in the screenshot';
+      return pageContext
+        ? `focused control in ${pageContext}`
+        : `focused control on the ${surface}`;
     default:
-      return getPageSemanticContext(event)
-        ? `target element in ${getPageSemanticContext(event)}`
-        : 'target element in the current visible UI';
+      return pageContext
+        ? `control in ${pageContext}`
+        : `control on the ${surface}`;
   }
 }
 
@@ -158,13 +295,19 @@ function getFallbackReplayInstruction(
     case 'scroll':
       return `Scroll the page/region with description "${elementDescription}" by value "${event.value || 'down'}".`;
     case 'drag':
-      return `Drag through the area described as "${elementDescription}".`;
+      return (
+        getActionReplayInstruction(event, elementDescription) ||
+        `Drag through the area described as "${elementDescription}".`
+      );
     case 'input':
       return `Input "${event.value || ''}" into the element described as "${elementDescription}".`;
     case 'keydown':
       return `Press "${event.value || 'the recorded key'}" on the element described as "${elementDescription}".`;
     default:
-      return `Click on the element described as "${elementDescription}".`;
+      return (
+        getActionReplayInstruction(event, elementDescription) ||
+        `Click on the element described as "${elementDescription}".`
+      );
   }
 }
 
@@ -178,30 +321,35 @@ function getFallbackActionSummary(
     case 'scroll':
       return `Scroll ${elementDescription}`;
     case 'drag':
-      return `Drag ${elementDescription}`;
+      return `${getActionSummaryVerb(event) || 'Drag'} ${elementDescription}`;
     case 'input':
       return `Input into ${elementDescription}`;
     case 'keydown':
       return `Press ${event.value || 'key'} on ${elementDescription}`;
     default:
-      return `Click ${elementDescription}`;
+      return `${getActionSummaryVerb(event) || 'Click'} ${elementDescription}`;
   }
 }
 
-function getActionGuidance(event: MidsceneRecorderEvent) {
+function getActionGuidance(
+  event: MidsceneRecorderEvent,
+  target?: MidsceneRecorderTarget,
+) {
+  const platformGuidance = getPlatformGuidance(target);
+
   switch (event.type) {
     case 'click':
-      return 'Identify the clicked UI element by exact visible text first. If no text is visible, use role + stable surrounding context. Never describe it by coordinates or as a nearby element.';
+      return `${platformGuidance} Identify the ${getPointerActionVerb(event).toLowerCase()} target by exact visible text first, then label/placeholder, then role plus stable surrounding context, then icon purpose, then visual position. Never describe it by coordinates, marker location, or as a nearby element.`;
     case 'input':
-      return 'Identify the exact input field at the marker before text entry. Use visible label, placeholder, field name, or stable surrounding section. Preserve the recorded input value, but do not describe the input value as the field.';
+      return `${platformGuidance} Identify the exact input field at the marker before text entry. Use visible label, placeholder, field name, or stable surrounding section. Preserve the recorded input value only in replayInstruction; never describe the typed value as the field.`;
     case 'scroll':
-      return 'Identify the scrollable page/region and the destination content revealed after scrolling. Use page title, visible heading, section title, list/table name, or stable region label; never say only "more content".';
+      return `${platformGuidance} Identify the scrollable page/region and concrete destination content revealed after scrolling. Use newly visible headings, section titles, list/table names, list items, or stable region labels; never say only "more content" or "current page".`;
     case 'drag':
-      return 'Identify the gesture start/end regions or the dragged UI control.';
+      return `${platformGuidance} Identify the ${getDragActionVerb(event).toLowerCase()} start/end regions or the dragged UI control. Do not describe only the gesture path or coordinates.`;
     case 'keydown':
-      return 'Identify the focused element or keyboard target if visible.';
+      return `${platformGuidance} Identify the focused element or keyboard target if visible, and preserve the recorded key in the replay instruction.`;
     default:
-      return 'Identify the UI target involved in this event.';
+      return `${platformGuidance} Identify the UI target involved in this event using the most stable visible text or surrounding context.`;
   }
 }
 
@@ -245,6 +393,19 @@ function isWeakDescription(value?: string) {
     normalized === 'more content' ||
     normalized === 'the page' ||
     normalized === 'current page' ||
+    normalized === 'current screen' ||
+    normalized === 'the screen' ||
+    normalized === 'current ui' ||
+    normalized === 'current visible ui' ||
+    normalized === 'current visible page' ||
+    normalized === 'current visible screen' ||
+    normalized === 'main area' ||
+    normalized === 'main scrollable area' ||
+    normalized === 'scrollable area' ||
+    normalized === 'highlighted element' ||
+    normalized === 'highlighted item' ||
+    normalized === 'marked element' ||
+    normalized === 'marked item' ||
     normalized.includes('ai is analyzing element') ||
     compact.includes('坐标') ||
     compact.includes('附近') ||
@@ -253,10 +414,19 @@ function isWeakDescription(value?: string) {
     normalized.includes('near the coordinate') ||
     normalized.includes('near coordinates') ||
     normalized.includes('nearby element') ||
+    normalized.includes('nearby item') ||
+    normalized.includes('near the marker') ||
+    normalized.includes('near marker') ||
     normalized.includes('near the point') ||
+    normalized.includes('near point') ||
     normalized.includes('at the point') ||
+    normalized.includes('button near point') ||
     normalized.includes('shown in the screenshot') ||
     normalized.includes('red rectangle') ||
+    normalized.includes('red marker') ||
+    normalized.includes('red box') ||
+    normalized.includes('highlighted element') ||
+    normalized.includes('highlighted item') ||
     normalized.includes('highlighted screenshot')
   );
 }
@@ -276,12 +446,52 @@ function isWeakReplayInstruction(value?: string) {
     normalized.includes('coordinate') ||
     normalized.includes('near the coordinate') ||
     normalized.includes('nearby element') ||
+    normalized.includes('nearby item') ||
+    normalized.includes('near the marker') ||
+    normalized.includes('near marker') ||
     normalized.includes('near the point') ||
+    normalized.includes('near point') ||
     normalized.includes('at the point') ||
     normalized.includes('ai is analyzing element') ||
     normalized.includes('more content') ||
+    normalized.includes('current page') ||
+    normalized.includes('current screen') ||
+    normalized.includes('highlighted element') ||
+    normalized.includes('highlighted item') ||
+    normalized.includes('red marker') ||
+    normalized.includes('red box') ||
     normalized.includes('shown in the screenshot') ||
     normalized.includes('highlighted screenshot')
+  );
+}
+
+function normalizeForComparison(value: string) {
+  return value.trim().toLowerCase().replace(/["'`]/g, '').replace(/\s+/g, ' ');
+}
+
+function isInputValueUsedAsFieldDescription(
+  event: MidsceneRecorderEvent,
+  elementDescription?: string,
+) {
+  if (event.type !== 'input' || !event.value || !elementDescription) {
+    return false;
+  }
+
+  const typedValue = normalizeForComparison(event.value);
+  if (!typedValue) {
+    return false;
+  }
+  const description = normalizeForComparison(elementDescription);
+
+  return (
+    description === typedValue ||
+    description === `${typedValue} input` ||
+    description === `${typedValue} field` ||
+    description === `${typedValue} text field` ||
+    description === `input ${typedValue}` ||
+    description === `field ${typedValue}` ||
+    description.includes(`typed value ${typedValue}`) ||
+    description.includes(`value ${typedValue}`)
   );
 }
 
@@ -319,6 +529,7 @@ async function describeWithRetry(
     try {
       const afterScreenshot = getRecorderEventAfterScreenshot(event);
       const pageContext = getPageSemanticContext(event);
+      const platformGuidance = getPlatformGuidance(target);
       const userContent: any[] = [
         {
           type: 'text',
@@ -334,7 +545,8 @@ ${JSON.stringify(
     pageContext,
     pageInfo: event.pageInfo,
     target,
-    guidance: getActionGuidance(event),
+    platformGuidance,
+    guidance: getActionGuidance(event, target),
   },
   null,
   2,
@@ -372,7 +584,7 @@ The target or region is highlighted in the screenshot below. Convert this event 
               role: 'system',
               content: `You convert Studio preview recorder UI events into semantic replay instructions.
 
-The recorder works from screenshots and mapped coordinates only. Infer stable UI intent from the highlighted screenshot.
+The recorder works from screenshots and mapped real-device coordinates only. Infer stable UI intent from the highlighted BEFORE screenshot. The AFTER screenshot is contextual evidence for state changes and scroll destinations.
 
 Output JSON only:
 {
@@ -386,29 +598,39 @@ Output JSON only:
 
 Rules:
 - Do NOT output coordinates as the main description.
-- Do NOT mention "near coordinates", "nearby element", the red marker, highlighted box, or screenshot.
-- Prefer visible UI text exactly as shown, for example "使用文档" or "开始使用".
-- Click/Input target quality bar:
-  - Best: exact visible text, accessible label, placeholder, or control label.
-  - Acceptable: role + stable surrounding context, for example "search input in the top navigation".
-  - Not acceptable: coordinates, "nearby element", "target element", or "element shown in the screenshot".
+- Do NOT mention "near coordinates", "nearby element", "near point", "red marker", highlighted box, highlighted element, or screenshot.
+- Prefer stable target descriptions in this order: exact visible text > label/placeholder > role + stable section/context > icon purpose > visual position.
+- Keep quoted UI text in the original UI language, for example "使用文档" or "开始使用".
+- Apply the platform guidance from the user event:
+  - Web: button, input, link, menu item, tab, dialog, aria-label, placeholder, form section.
+  - Mobile: tab, list item, text field, icon button, navigation bar, bottom bar, sheet, card, screen section.
+  - Desktop/computer: menu item, toolbar button, dialog field, sidebar item, window control, file row, application region.
+- Pointer action rules:
+  - Preserve event.actionType semantics. Tap, DoubleClick, LongPress, and RightClick must not all become Click.
+  - Tap replayInstruction format: Tap on the element described as "<elementDescription>".
+  - DoubleClick replayInstruction format: Double click on the element described as "<elementDescription>".
+  - LongPress replayInstruction format: Long press the element described as "<elementDescription>".
+  - RightClick replayInstruction format: Right click on the element described as "<elementDescription>".
+  - Click replayInstruction format: Click on the element described as "<elementDescription>".
 - Input-specific rules:
   - The highlighted BEFORE screenshot marks the field that receives the text.
-  - The screenshot after the action may show the typed value; use it only to confirm the field, not as the field description.
+  - The screenshot after the action may show the typed value; use it only to confirm the field, never as the field description.
   - elementDescription must identify the field itself, for example "年龄 input in the basic form" or "search input in the top navigation".
   - Never use "AI is analyzing element", the typed value, or a generic "input field" as elementDescription.
+  - Input replayInstruction format: Input "<value>" into the element described as "<elementDescription>".
 - Scroll target quality bar:
   - elementDescription describes the scrollable page, panel, list, table, or section.
-  - scrollDestinationDescription describes what the scroll is trying to reveal or reach, using newly visible headings, section titles, list items, or stable content from the AFTER screenshot.
+  - scrollDestinationDescription is required and describes what the scroll is trying to reveal or reach, using newly visible headings, section titles, list items, or stable content from the AFTER screenshot.
   - Prefer descriptions like "集成到 Playwright - Midscene - Vision-Driven UI Automation page, scrolling toward the API reference section" or "Android API documentation page, scrolling to the installation steps section".
-  - Do NOT write generic phrases like "more content", "the page", or "main scrollable area" unless no other context exists.
-- Click replayInstruction format: Click on the element described as "<elementDescription>".
-- Input replayInstruction format: Input "<value>" into the element described as "<elementDescription>".
+  - Do NOT write generic phrases like "more content", "the page", "current screen", or "main scrollable area".
 - Scroll replayInstruction format: Scroll the page/region with description "<elementDescription>" by value "<recorded value>" until "<scrollDestinationDescription>" is visible.
 - Scroll actionSummary format: Scroll <elementDescription> toward <scrollDestinationDescription>.
-- Drag replayInstruction format: Drag from/to the area described as "<elementDescription>".
-- Keep quoted UI text in the original UI language.
-- If uncertain, inspect the red-marked target and provide the best concrete visible text/role/context description. Set confidence to "low"; do not fall back to coordinates.`,
+- Drag/Swipe rules:
+  - Drag replayInstruction format: Drag through the area described as "<elementDescription>".
+  - Swipe replayInstruction format: Swipe through the area described as "<elementDescription>".
+  - Describe start/end regions or the dragged UI control; do not describe only the gesture path.
+- KeyboardPress replayInstruction format: Press "<value>" on the element described as "<elementDescription>".
+- If uncertain, provide the best concrete visible text/role/context description. Set confidence to "low"; do not fall back to coordinates.`,
             },
             {
               role: 'user',
@@ -425,31 +647,44 @@ Rules:
       if (isWeakDescription(content.elementDescription)) {
         throw new Error('AI returned a weak recorder event description.');
       }
+      if (
+        isInputValueUsedAsFieldDescription(event, content.elementDescription)
+      ) {
+        throw new Error(
+          'AI used the recorded input value as the field description.',
+        );
+      }
       const elementDescription = content.elementDescription!.trim();
       const scrollDestinationDescription =
         event.type === 'scroll'
           ? content.scrollDestinationDescription?.trim()
           : undefined;
-      const replayInstruction =
-        event.type === 'scroll' && scrollDestinationDescription
-          ? `Scroll the page/region with description "${elementDescription}" by value "${event.value || 'down'}" until "${scrollDestinationDescription}" is visible.`
-          : content.replayInstruction?.trim() ||
-            getFallbackReplayInstruction(event, elementDescription);
-      if (isWeakReplayInstruction(replayInstruction)) {
-        throw new Error('AI returned a weak recorder replay instruction.');
-      }
       if (
         event.type === 'scroll' &&
-        !hasScrollDestination(replayInstruction, scrollDestinationDescription)
+        !hasScrollDestination('', scrollDestinationDescription)
       ) {
         throw new Error(
           'AI returned a scroll description without a destination.',
         );
       }
+      const aiReplayInstruction = content.replayInstruction?.trim();
+      if (aiReplayInstruction && isWeakReplayInstruction(aiReplayInstruction)) {
+        throw new Error('AI returned a weak recorder replay instruction.');
+      }
+      const replayInstruction =
+        event.type === 'scroll' && scrollDestinationDescription
+          ? `Scroll the page/region with description "${elementDescription}" by value "${event.value || 'down'}" until "${scrollDestinationDescription}" is visible.`
+          : getCanonicalReplayInstruction(event, elementDescription) ||
+            aiReplayInstruction ||
+            getFallbackReplayInstruction(event, elementDescription);
+      if (isWeakReplayInstruction(replayInstruction)) {
+        throw new Error('AI returned a weak recorder replay instruction.');
+      }
       const actionSummary =
         event.type === 'scroll' && scrollDestinationDescription
           ? `Scroll ${elementDescription} toward ${scrollDestinationDescription}`
-          : content.actionSummary?.trim() ||
+          : getCanonicalActionSummary(event, elementDescription) ||
+            content.actionSummary?.trim() ||
             getFallbackActionSummary(event, elementDescription);
 
       return {
@@ -492,11 +727,12 @@ function createFallbackEvent(
   event: MidsceneRecorderEvent,
   error: string,
   screenshotWithBox?: string,
+  target?: MidsceneRecorderTarget,
 ): MidsceneRecorderEvent {
   const elementDescription =
     event.elementDescription && !isWeakDescription(event.elementDescription)
       ? event.elementDescription
-      : getFallbackDescription(event);
+      : getFallbackDescription(event, target);
   return {
     ...event,
     elementDescription,
@@ -529,7 +765,7 @@ export async function describeRecorderUIEvent(
       : 'Recorder event has no screenshot.';
     return {
       usedFallback: true,
-      event: createFallbackEvent(event, error),
+      event: createFallbackEvent(event, error, undefined, input.target),
     };
   }
 
@@ -563,7 +799,12 @@ export async function describeRecorderUIEvent(
     return {
       usedFallback: true,
       error: message,
-      event: createFallbackEvent(event, message, screenshotWithBox),
+      event: createFallbackEvent(
+        event,
+        message,
+        screenshotWithBox,
+        input.target,
+      ),
     };
   }
 }

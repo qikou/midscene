@@ -15,14 +15,14 @@ export interface PlaygroundShellProps {
     onSelect: (key: string) => void;
     selectedKey: string;
   };
-  /** Label shown in the shell header. Defaults to `'Playground'`. */
+  /** Label shown in the shell header. Defaults to `'API Playground'`. */
   title?: string;
 }
 
 export function PlaygroundShell({
   children,
   modeMenu,
-  title = 'Playground',
+  title = 'API Playground',
 }: PlaygroundShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -48,7 +48,7 @@ export function PlaygroundShell({
 
   return (
     <div className="playground-shell">
-      <div className="app-drag absolute left-0 top-0 z-10 flex h-[56px] w-full items-center gap-[6px] border-b border-border-subtle bg-surface px-[22px]">
+      <div className="app-drag absolute left-0 top-0 z-10 flex h-[48px] w-full items-center gap-[6px] border-b border-border-subtle bg-surface px-[22px]">
         {modeMenu ? (
           <div className="app-no-drag playground-shell-mode-menu" ref={menuRef}>
             <button
@@ -97,7 +97,7 @@ export function PlaygroundShell({
         </span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden pt-[56px]">{children}</div>
+      <div className="min-h-0 flex-1 overflow-hidden pt-[48px]">{children}</div>
     </div>
   );
 }

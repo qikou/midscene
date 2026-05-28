@@ -204,16 +204,15 @@ export interface DiscoveredDevice {
  * Per-platform error from the cross-platform device discovery scan.
  *
  * Platforms (Android, Harmony) require an external CLI (`adb`, `hdc`) to be
- * installed and reachable on PATH. When that prerequisite is missing the
- * scan throws — the renderer needs to know so it can prompt the user to
- * install the toolchain instead of just rendering "No devices".
+ * installed and reachable on PATH. Empty CLI output is a normal "no device"
+ * state; this error is reserved for command/probe failures that need setup
+ * guidance instead of just rendering "No devices".
  */
 export interface PlatformDiscoveryError {
   platformId: StudioPlatformId;
   /**
-   * `toolchain-missing` covers any failure of the platform's discovery
-   * probe — in practice this is dominated by the CLI binary not being on
-   * PATH, which is the actionable case for the user.
+   * `toolchain-missing` means the platform discovery command could not run
+   * successfully, e.g. the CLI binary is not installed or not reachable.
    */
   kind: 'toolchain-missing';
 }

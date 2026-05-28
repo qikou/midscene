@@ -285,6 +285,17 @@
   border-radius: 8px;
 }
 
+[data-theme="dark"] .studio-recorder-timeline .ant-card .ant-card-body {
+  border: 1px solid var(--midscene-border-subtle);
+  background: var(--midscene-surface-muted) !important;
+  color: var(--midscene-text-primary) !important;
+}
+
+[data-theme="dark"] .studio-recorder-timeline .ant-space,
+[data-theme="dark"] .studio-recorder-timeline .ant-typography {
+  color: var(--midscene-text-primary) !important;
+}
+
 .studio-recorder-empty {
   display: flex;
   min-height: 160px;
@@ -518,7 +529,7 @@
   border-radius: 8px;
   background: var(--midscene-surface);
   padding: 16px;
-  color: #064587;
+  color: var(--midscene-text-primary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
   font-size: 13px;
