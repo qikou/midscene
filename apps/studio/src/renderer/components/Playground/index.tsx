@@ -38,6 +38,12 @@ function NotConnectedFallback() {
 
 declare const __APP_VERSION__: string;
 const RIGHT_PANEL_MODE_STORAGE_KEY = 'studio.rightPanelMode';
+const STUDIO_RECORDER_ENTRY_ENABLED =
+  (
+    import.meta as unknown as {
+      env?: Record<string, boolean | string | undefined>;
+    }
+  ).env?.VITE_STUDIO_RECORDER_ENABLED === 'true';
 type ReplayableCodeType = 'markdown' | 'yaml';
 type StudioExternalRunRequest = ExternalRunRequest & {
   targetSignature: string | null;
@@ -99,6 +105,10 @@ function ImportReplayIcon() {
 }
 
 function readPersistedRightPanelMode(): StudioRecorderPanelMode {
+  if (!STUDIO_RECORDER_ENTRY_ENABLED) {
+    return 'playground';
+  }
+
   if (typeof window === 'undefined') {
     return 'playground';
   }
@@ -227,24 +237,25 @@ export default function Playground() {
     }
   }, [importReplayDisabledReason, triggerExternalRun]);
   const importReplayAction = useMemo(
-    () => (
-      <Tooltip
-        placement="top"
-        title={importReplayDisabledReason || 'Import Markdown or YAML replay'}
-      >
-        <span className="inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center leading-none">
-          <button
-            aria-label="Import Markdown or YAML replay"
-            className="inline-flex h-[32px] w-[32px] min-w-[32px] items-center justify-center rounded-full border border-border-subtle bg-surface p-[7px] leading-none text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-45"
-            disabled={Boolean(importReplayDisabledReason)}
-            onClick={handleImportReplay}
-            type="button"
-          >
-            <ImportReplayIcon />
-          </button>
-        </span>
-      </Tooltip>
-    ),
+    () =>
+      STUDIO_RECORDER_ENTRY_ENABLED ? (
+        <Tooltip
+          placement="top"
+          title={importReplayDisabledReason || 'Import Markdown or YAML replay'}
+        >
+          <span className="inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center leading-none">
+            <button
+              aria-label="Import Markdown or YAML replay"
+              className="inline-flex h-[32px] w-[32px] min-w-[32px] items-center justify-center rounded-full border border-border-subtle bg-surface p-[7px] leading-none text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-45"
+              disabled={Boolean(importReplayDisabledReason)}
+              onClick={handleImportReplay}
+              type="button"
+            >
+              <ImportReplayIcon />
+            </button>
+          </span>
+        </Tooltip>
+      ) : null,
     [handleImportReplay, importReplayDisabledReason],
   );
   const playgroundConfig = useMemo(
@@ -257,18 +268,24 @@ export default function Playground() {
     [activeExternalRunRequest, importReplayAction, playgroundStorageNamespace],
   );
   const modeMenuItems = useMemo(
-    () => [
-      {
-        key: 'playground',
-        label: 'API Playground',
-        icon: <PlaygroundModeIcon />,
-      },
-      { key: 'recorder', label: 'Recorder', icon: <RecorderModeIcon /> },
-    ],
+    () =>
+      STUDIO_RECORDER_ENTRY_ENABLED
+        ? [
+            {
+              key: 'playground',
+              label: 'API Playground',
+              icon: <PlaygroundModeIcon />,
+            },
+            { key: 'recorder', label: 'Recorder', icon: <RecorderModeIcon /> },
+          ]
+        : [],
     [],
   );
   const handleModeSelect = useCallback(
     (key: string) => {
+      if (!STUDIO_RECORDER_ENTRY_ENABLED && key === 'recorder') {
+        return;
+      }
       if (key !== 'playground' && key !== 'recorder') {
         return;
       }
@@ -342,6 +359,13 @@ export default function Playground() {
   );
 
   useEffect(() => {
+    if (!STUDIO_RECORDER_ENTRY_ENABLED && rightPanelMode === 'recorder') {
+      showPlaygroundPanel();
+      void stopRecording();
+    }
+  }, [rightPanelMode, showPlaygroundPanel, stopRecording]);
+
+  useEffect(() => {
     return () => {
       void stopRecording();
     };
@@ -349,14 +373,18 @@ export default function Playground() {
 
   return (
     <PlaygroundShell
-      modeMenu={{
-        items: modeMenuItems,
-        onSelect: handleModeSelect,
-        selectedKey: rightPanelMode,
-      }}
+      modeMenu={
+        STUDIO_RECORDER_ENTRY_ENABLED
+          ? {
+              items: modeMenuItems,
+              onSelect: handleModeSelect,
+              selectedKey: rightPanelMode,
+            }
+          : undefined
+      }
     >
       <div className="min-h-0 h-full flex-1 overflow-hidden">
-        {rightPanelMode === 'recorder' ? (
+        {STUDIO_RECORDER_ENTRY_ENABLED && rightPanelMode === 'recorder' ? (
           <StudioRecorderPanel onReplaySession={handleReplaySession} />
         ) : studioPlayground.phase === 'booting' ? (
           <div className="flex h-full items-center justify-center px-6 text-center text-[14px] leading-[22px] text-text-tertiary">
