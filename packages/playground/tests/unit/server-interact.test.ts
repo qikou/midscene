@@ -393,6 +393,60 @@ describe('PlaygroundServer manual interaction APIs', () => {
     });
   });
 
+  test('recorder dispatches preview interactions before taking the after screenshot', async () => {
+    const callOrder: string[] = [];
+    const tap = vi.fn(async () => {
+      callOrder.push('tap');
+    });
+    const inputPrimitives = makeInputPrimitiveStub({
+      pointer: {
+        tap,
+        doubleClick: vi.fn(async () => {}),
+        longPress: vi.fn(async () => {}),
+        dragAndDrop: vi.fn(async () => {}),
+      },
+    });
+    const screenshotBase64 = vi.fn(async () => {
+      callOrder.push('screenshot');
+      return 'base64-image';
+    });
+    const size = vi.fn(async () => {
+      callOrder.push('size');
+      return { width: 390, height: 844 };
+    });
+    const server = new PlaygroundServer({
+      interface: {
+        interfaceType: 'computer',
+        actionSpace: () => [],
+        inputPrimitives,
+        screenshotBase64,
+        size,
+      },
+    } as any);
+
+    await server.launch(6120);
+    const startRecorderHandler = getRouteHandler(
+      server,
+      'post',
+      '/recorder/start',
+    );
+    await startRecorderHandler(
+      { body: { sessionId: 'session-preview-order' } },
+      createMockResponse(),
+    );
+    callOrder.length = 0;
+
+    const interactHandler = getRouteHandler(server, 'post', '/interact');
+    await interactHandler(
+      { body: { actionType: 'Tap', x: 10, y: 20 } },
+      createMockResponse(),
+    );
+
+    expect(tap).toHaveBeenCalledWith({ x: 10, y: 20 }, { duration: undefined });
+    expect(callOrder[0]).toBe('tap');
+    expect(callOrder).toEqual(['tap', 'screenshot', 'size']);
+  });
+
   test('recorder appends navigation event when preview interact changes web url', async () => {
     let currentUrl = 'https://example.com/start';
     let currentScreenshot = 'start-screenshot';

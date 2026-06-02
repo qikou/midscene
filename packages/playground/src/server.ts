@@ -10,7 +10,7 @@ import type {
 } from '@midscene/core';
 import { ReportActionDump, runConnectivityTest } from '@midscene/core';
 import type { Agent as PageAgent } from '@midscene/core/agent';
-import { getTmpDir } from '@midscene/core/utils';
+import { getTmpDir, sleep } from '@midscene/core/utils';
 import { PLAYGROUND_SERVER_PORT } from '@midscene/shared/constants';
 import {
   globalModelConfigManager,
@@ -46,6 +46,7 @@ import type { AgentFactory } from './types';
 import 'dotenv/config';
 
 const defaultPort = PLAYGROUND_SERVER_PORT;
+const RECORDER_CAPTURE_AFTER_INTERACT_DELAY_MS = 250;
 
 function serializeAiConfigSignature(aiConfig: Record<string, unknown>): string {
   return JSON.stringify(
@@ -126,6 +127,7 @@ const STATIC_PATH = join(__dirname, '..', '..', 'static');
 
 const debugScreenshot = getDebug('playground:screenshot', { console: true });
 const debugMjpeg = getDebug('playground:mjpeg', { console: true });
+const debugInteract = getDebug('playground:interact', { console: true });
 
 /**
  * Thrown when a caller supplies an /interact body that fails validation
@@ -189,6 +191,24 @@ const POINTER_INTERACT_ACTIONS = new Set([
 
 function isPointerInteractActionType(actionType: string): boolean {
   return POINTER_INTERACT_ACTIONS.has(actionType);
+}
+
+function summarizeInteractPayload(
+  body: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    actionType: body.actionType,
+    x: body.x,
+    y: body.y,
+    endX: body.endX,
+    endY: body.endY,
+    duration: body.duration,
+    direction: body.direction,
+    scrollType: body.scrollType,
+    distance: body.distance,
+    keyName: body.keyName,
+    valueLength: typeof body.value === 'string' ? body.value.length : undefined,
+  };
 }
 
 const buildLocateActionParams: InteractParamBuilder = (body, actionType) => {
@@ -436,6 +456,9 @@ class PlaygroundServer {
   private _recorderSessionId: string | null = null;
   private _recorderEvents: PlaygroundRecorderEvent[] = [];
   private _studioPreviewRecorderLastScreenshot: string | undefined;
+  private _studioPreviewRecorderLastPageState:
+    | PlaygroundRecorderPageState
+    | undefined;
   private _activeConnection: PlaygroundActiveConnection = {
     session: null,
     agent: null,
@@ -737,6 +760,7 @@ class PlaygroundServer {
     this._recorderSessionId = null;
     this._recorderEvents = [];
     this._studioPreviewRecorderLastScreenshot = undefined;
+    this._studioPreviewRecorderLastPageState = undefined;
   }
 
   private canRecordStudioPreviewInteractions(): boolean {
@@ -835,13 +859,11 @@ class PlaygroundServer {
     if (!this._recorderSessionId) {
       return undefined;
     }
-    const freshScreenshot = await this.takeRecorderScreenshot();
-    if (freshScreenshot) {
-      this._studioPreviewRecorderLastScreenshot = freshScreenshot;
-    }
     return {
-      screenshot: freshScreenshot || this._studioPreviewRecorderLastScreenshot,
-      pageState: await this.getActiveRecorderPageState(),
+      screenshot: this._studioPreviewRecorderLastScreenshot,
+      pageState:
+        this._studioPreviewRecorderLastPageState ||
+        (await this.getActiveRecorderPageState()),
     };
   }
 
@@ -850,6 +872,7 @@ class PlaygroundServer {
     this._studioPreviewRecorderLastScreenshot =
       await this.takeRecorderScreenshot();
     const initialPageState = await this.getActiveRecorderPageState();
+    this._studioPreviewRecorderLastPageState = initialPageState;
     const initialNavigationEvent =
       this.buildStudioPreviewInitialNavigationEvent(
         initialPageState,
@@ -870,8 +893,23 @@ class PlaygroundServer {
     const before =
       snapshotBefore || (await this.captureRecorderSnapshotBeforeInteract());
     const screenshotBefore = before?.screenshot;
+    debugInteract('recorder capture scheduled after action %o', {
+      payload: summarizeInteractPayload(payload),
+      delayMs: RECORDER_CAPTURE_AFTER_INTERACT_DELAY_MS,
+      hasBeforeScreenshot: Boolean(screenshotBefore),
+      beforeUrl: before?.pageState.url,
+    });
+    await sleep(RECORDER_CAPTURE_AFTER_INTERACT_DELAY_MS);
+    if (!this._recorderSessionId) {
+      return;
+    }
     const screenshotAfter = await this.takeRecorderScreenshot();
     const pageStateAfter = await this.getActiveRecorderPageState();
+    debugInteract('recorder capture completed after action %o', {
+      payload: summarizeInteractPayload(payload),
+      hasAfterScreenshot: Boolean(screenshotAfter),
+      afterUrl: pageStateAfter.url,
+    });
     const event = await this.buildStudioPreviewRecorderEvent(
       payload,
       before?.pageState || pageStateAfter,
@@ -880,6 +918,7 @@ class PlaygroundServer {
     );
     if (!event) {
       this._studioPreviewRecorderLastScreenshot = screenshotAfter;
+      this._studioPreviewRecorderLastPageState = pageStateAfter;
       return;
     }
 
@@ -894,6 +933,7 @@ class PlaygroundServer {
       this._recorderEvents.push(navigationEvent);
     }
     this._studioPreviewRecorderLastScreenshot = screenshotAfter;
+    this._studioPreviewRecorderLastPageState = pageStateAfter;
   }
 
   private async buildStudioPreviewRecorderEvent(
@@ -2022,6 +2062,7 @@ class PlaygroundServer {
     this._app.post('/recorder/stop', async (_req: Request, res: Response) => {
       this._recorderSessionId = null;
       this._studioPreviewRecorderLastScreenshot = undefined;
+      this._studioPreviewRecorderLastPageState = undefined;
       res.json({ ok: true });
     });
 
@@ -2168,6 +2209,13 @@ class PlaygroundServer {
       }
 
       try {
+        const interactStartedAt = Date.now();
+        debugInteract('received manual interact %o', {
+          payload: summarizeInteractPayload(req.body ?? {}),
+          interfaceType: agent.interface.interfaceType,
+          recorderActive: Boolean(this._recorderSessionId),
+          hasInputPrimitives: Boolean(agent.interface.inputPrimitives),
+        });
         const recorderSnapshotBefore =
           await this.captureRecorderSnapshotBeforeInteract();
         const inputPrimitives = agent.interface.inputPrimitives;
@@ -2175,10 +2223,18 @@ class PlaygroundServer {
           await dispatchPointer(inputPrimitives, req.body ?? {}, () =>
             agent.interface.size(),
           );
+          debugInteract('primitive manual interact dispatched %o', {
+            payload: summarizeInteractPayload(req.body ?? {}),
+            elapsedMs: Date.now() - interactStartedAt,
+          });
           await this.storeStudioPreviewRecorderEvent(
             req.body ?? {},
             recorderSnapshotBefore,
           );
+          debugInteract('manual interact completed %o', {
+            payload: summarizeInteractPayload(req.body ?? {}),
+            elapsedMs: Date.now() - interactStartedAt,
+          });
           res.json({});
           return;
         }
@@ -2196,10 +2252,18 @@ class PlaygroundServer {
 
         const params = buildInteractParams(actionType, req.body ?? {});
         await this.runInteractAction(agent, actionType, params);
+        debugInteract('actionSpace manual interact dispatched %o', {
+          payload: summarizeInteractPayload(req.body ?? {}),
+          elapsedMs: Date.now() - interactStartedAt,
+        });
         await this.storeStudioPreviewRecorderEvent(
           req.body ?? {},
           recorderSnapshotBefore,
         );
+        debugInteract('manual interact completed %o', {
+          payload: summarizeInteractPayload(req.body ?? {}),
+          elapsedMs: Date.now() - interactStartedAt,
+        });
         res.json({});
       } catch (error: unknown) {
         if (error instanceof PointerInputError) {
