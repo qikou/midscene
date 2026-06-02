@@ -37,13 +37,9 @@ function NotConnectedFallback() {
 }
 
 declare const __APP_VERSION__: string;
+declare const __STUDIO_RECORDER_ENTRY_ENABLED__: boolean;
 const RIGHT_PANEL_MODE_STORAGE_KEY = 'studio.rightPanelMode';
-const STUDIO_RECORDER_ENTRY_ENABLED =
-  (
-    import.meta as unknown as {
-      env?: Record<string, boolean | string | undefined>;
-    }
-  ).env?.VITE_STUDIO_RECORDER_ENABLED === 'true';
+const STUDIO_RECORDER_ENTRY_ENABLED = __STUDIO_RECORDER_ENTRY_ENABLED__;
 type ReplayableCodeType = 'markdown' | 'yaml';
 type StudioExternalRunRequest = ExternalRunRequest & {
   targetSignature: string | null;
@@ -151,6 +147,7 @@ export function createStudioPlaygroundConfig(
     emptyState: <StudioPlaygroundEmptyState />,
     externalRunRequest: options.externalRunRequest ?? null,
     onDownloadReport: downloadStudioReport,
+    persistMessages: false,
     showClearButton: true,
     storageNamespace: options.storageNamespace,
     promptInputChrome: {

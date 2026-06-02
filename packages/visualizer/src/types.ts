@@ -403,6 +403,12 @@ export type ReportDownloadHandler = (
 export interface UniversalPlaygroundConfig {
   showContextPreview?: boolean;
   storageNamespace?: string;
+  /**
+   * Whether playground conversation/execution messages are persisted.
+   * Defaults to `true`. Host shells can set this to `false` when each mounted
+   * playground panel should start from a fresh conversation.
+   */
+  persistMessages?: boolean;
   layout?: 'vertical' | 'horizontal';
   showVersionInfo?: boolean;
   enableScrollToBottom?: boolean;

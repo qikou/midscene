@@ -198,3 +198,10 @@ export async function generateRecorderMarkdownReplay(
     throw new Error(`Failed to generate recorder Markdown replay: ${error}`);
   }
 }
+
+export async function convertRecordLogIntoMarkdown(
+  log: RecorderMarkdownGenerationInput,
+  modelConfig: IModelConfig,
+): Promise<string> {
+  return generateRecorderMarkdownReplay(log, modelConfig);
+}

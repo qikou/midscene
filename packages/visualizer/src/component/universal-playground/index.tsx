@@ -107,6 +107,10 @@ export function UniversalPlayground({
   // Use custom hooks for state management
   // Determine the storage provider based on configuration
   const effectiveStorage = useMemo(() => {
+    if (componentConfig.persistMessages === false) {
+      return null;
+    }
+
     // If external storage is provided, use it
     if (storage) {
       return storage;
@@ -127,7 +131,13 @@ export function UniversalPlayground({
     console.log(`Using ${bestStorageType} storage for namespace: ${namespace}`);
 
     return createStorageProvider(bestStorageType, namespace);
-  }, [storage, sdkReady, componentConfig.storageNamespace, playgroundSDK]);
+  }, [
+    storage,
+    sdkReady,
+    componentConfig.storageNamespace,
+    componentConfig.persistMessages,
+    playgroundSDK,
+  ]);
 
   const {
     loading,
@@ -153,7 +163,8 @@ export function UniversalPlayground({
     effectiveStorage,
     contextProvider,
     branding.targetName,
-    !componentConfig.storageNamespace,
+    componentConfig.persistMessages !== false &&
+      !componentConfig.storageNamespace,
   );
 
   // Use execution hook

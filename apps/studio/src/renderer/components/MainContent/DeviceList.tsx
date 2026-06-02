@@ -391,7 +391,10 @@ export function DeviceList({
   return (
     <div className="flex h-full w-full flex-col items-center overflow-y-auto px-[16px] pb-[40px] pt-[88px]">
       <div className="mb-[28px] flex w-[704px] flex-col">
-        <h1 className="m-0 font-['Inter'] text-[24px] font-medium leading-[32px] tracking-[0] text-text-primary">
+        <h1
+          className="m-0 text-[24px] font-medium not-italic leading-[32px] tracking-[0] text-[#0D0D0D] dark:text-text-primary"
+          style={{ fontFamily: 'Inter, sans-serif' }}
+        >
           Overview
         </h1>
         <p className="m-0 mt-[4px] font-sans text-[12px] font-normal leading-[18px] text-text-secondary">

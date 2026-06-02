@@ -16,10 +16,16 @@ export {
   generatePlaywrightTestStream,
 } from './prompt/playwright-generator';
 export {
+  convertRecordLogIntoMarkdown,
   createRecorderMarkdownReplayPrompt,
   generateRecorderMarkdownReplay,
 } from './prompt/markdown-generator';
 export type { RecorderMarkdownGenerationInput } from './prompt/markdown-generator';
+export { generateRecorderSessionMetadata } from './prompt/recorder-metadata-generator';
+export type {
+  RecorderGeneratedMetadata,
+  RecorderMetadataGenerationInput,
+} from './prompt/recorder-metadata-generator';
 export {
   generateRecorderYamlTest,
   generateRecorderYamlTestStream,
