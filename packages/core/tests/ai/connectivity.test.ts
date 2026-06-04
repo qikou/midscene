@@ -23,6 +23,7 @@ vi.setConfig({
   '.env.init_json',
   '.env.openai',
   '.env.ui-tars',
+  '.env.mimo',
 ].forEach((envFile) => {
   const configPath = path.resolve(__dirname, `../../${envFile}`);
   if (!existsSync(configPath)) {
